@@ -1,0 +1,48 @@
+name: Deploy to cPanel
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+
+      - name: Create service-account.json
+        run: echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' > service-account.json
+
+      - name: Create .env
+        run: |
+          printf 'PORT=3000\nSHEET_ID=%s\nNODE_ENV=production\n' \
+            '${{ secrets.SHEET_ID }}' > .env
+
+      - name: Deploy to cPanel via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./
+          server-dir: ${{ secrets.FTP_TARGET_DIR }}
+          exclude: |
+            .git/**
+            .gitignore
+            .github/**
+            .claspignore
+            *.gs
+            *.py
+            appsscript.json
+            CURRENT_PROGRESS.md
+            WAREHOUSE_PALLET_RULES.md
