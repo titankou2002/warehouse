@@ -1,0 +1,34 @@
+# Clasp / GAS
+.clasp.json
+.clasprc.json
+
+# Node.js (for upcoming rewrite)
+node_modules/
+npm-debug.log*
+.env
+.env.local
+
+# Google service account credentials
+credentials.json
+service-account*.json
+*-credentials.json
+token.json
+
+# Build output / generated files
+dist/
+build/
+index_gas.html
+DataCache.js
+app.js
+parsed_inventory.json
+parsed_inventory_enriched.json
+parsed_inventory.csv
+永安倉庫2025庫位表.xlsx
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

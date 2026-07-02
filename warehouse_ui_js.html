@@ -1,0 +1,269 @@
+<script>
+  const state = {
+    sheets: [],
+    activeSheet: "",
+    activeZoneView: null,
+    activeSlot: "",
+    activePalletKey: "",
+    searchRows: [],
+    searchReady: false,
+    editingRow: null,
+    saving: false
+  };
+
+  const $ = id => document.getElementById(id);
+
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+
+  function setStatus(msg, cls) {
+    const el = $("status");
+    el.textContent = msg;
+    el.className = "status " + (cls || "");
+  }
+
+  function fail(err) {
+    const msg = (err && (err.stack || err.message)) || String(err);
+    setStatus("載入失敗：\n" + msg, "bad");
+  }
+
+  function gas(method, ...args) {
+    return new Promise((resolve, reject) => {
+      if (typeof google === "undefined" || !google.script || !google.script.run) {
+        reject(new Error("google.script.run 不存在，請確認從 Apps Script /exec 開啟"));
+        return;
+      }
+      let done = false;
+      const timeoutMs = method === "updateWarehousePallet" ? 30000 : 20000;
+      const timer = setTimeout(() => {
+        if (!done) {
+          done = true;
+          reject(new Error(method + " timeout after " + Math.round(timeoutMs / 1000) + "s"));
+        }
+      }, timeoutMs);
+      google.script.run
+        .withSuccessHandler(result => { if (done) return; done = true; clearTimeout(timer); resolve(result); })
+        .withFailureHandler(error => { if (done) return; done = true; clearTimeout(timer); reject(error); })[method](...args);
+    });
+  }
+
+  function paletteClass(row) {
+    const bg = String(row.BgColor || "WHITE").toLowerCase();
+    const font = String(row.FontColor || "BLACK").toLowerCase();
+    return [bg === "red" ? "red" : bg === "yellow" ? "yellow" : bg === "green" ? "green" : "white", font === "blue" ? "bluefont" : ""].join(" ").trim();
+  }
+
+  function rowText(row) {
+    return [row.SKU, row.Batch, row.HanhwaCode, row.Brand, row.Series, row.OriginalName, row.Sheet, row.Stack, row.Slot].join(" ").toLowerCase();
+  }
+
+  async function boot() {
+    try {
+      setStatus("讀取區域清單...");
+      state.sheets = await gas("getInventorySheetList");
+      renderZoneChips();
+      const preferred = state.sheets.find(s => s.name === "B-G區") || state.sheets[0];
+      if (!preferred) throw new Error("沒有可用分區");
+      await loadZone(preferred.name);
+      preloadSearchIndex();
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  async function preloadSearchIndex() {
+    try {
+      const raw = await gas("getSearchIndex");
+      const rows = JSON.parse(raw);
+      if (Array.isArray(rows)) {
+        state.searchRows = rows;
+        state.searchReady = true;
+        renderSearch();
+      }
+    } catch (err) {
+      console.warn("search preload failed", err);
+    }
+  }
+
+  async function loadZone(sheetName, preferredSlot, preferredPalletKey) {
+    setStatus("載入 " + sheetName + " 倉位剖面...");
+    state.activeSheet = sheetName;
+    renderZoneChips();
+    const zoneView = await gas("getWarehouseZoneView", sheetName);
+    state.activeZoneView = zoneView;
+    const slots = zoneView.slots || [];
+    const slot = preferredSlot || state.activeSlot;
+    const found = slots.find(s => s.slotId === slot);
+    state.activeSlot = (found ? found.slotId : (slots[0] ? slots[0].slotId : ""));
+    state.activePalletKey = preferredPalletKey || "";
+    renderSlotRail();
+    renderCrossSection();
+    renderSearch();
+    setStatus("完成：" + sheetName + "，" + zoneView.slotCount + " 格 / " + zoneView.totalPallets + " 板", "ok");
+  }
+
+  function renderZoneChips() {
+    $("zoneChips").innerHTML = state.sheets.map(sheet => {
+      const active = sheet.name === state.activeSheet ? "active" : "";
+      return '<button class="zone-chip ' + active + '" onclick="loadZone(' + JSON.stringify(sheet.name) + ')">' + esc(sheet.name) + '<span>' + esc(sheet.count) + '</span></button>';
+    }).join("");
+  }
+
+  function renderSlotRail() {
+    const zoneView = state.activeZoneView;
+    if (!zoneView || !zoneView.slots || !zoneView.slots.length) {
+      $("slotRail").innerHTML = '<div class="empty">這個區域沒有可用格位資料</div>';
+      return;
+    }
+
+    $("slotRail").innerHTML = zoneView.slots.map(slot => {
+      const active = slot.slotId === state.activeSlot ? "active" : "";
+      const bars = [];
+      for (let depth = 1; depth <= zoneView.maxDepth; depth += 1) {
+        const depthData = (slot.depths || []).find(d => d.depth === depth);
+        const height = depthData ? depthData.height : 0;
+        const px = Math.max(8, height * 10);
+        bars.push('<div class="mini-bar" style="height:' + px + 'px"></div>');
+      }
+      return '<button class="slot-chip ' + active + '" onclick="selectSlot(' + JSON.stringify(slot.slotId) + ')"><strong>格 ' + esc(slot.slotId) + '</strong><small>' + esc(slot.palletCount) + ' 板 / 最高 ' + esc(slot.maxLevel) + ' 層 / 最深 ' + esc(slot.maxDepth) + ' 排</small><div class="mini-depths">' + bars.join("") + '</div></button>';
+    }).join("");
+  }
+
+  function selectSlot(slotId) {
+    state.activeSlot = slotId;
+    state.activePalletKey = "";
+    renderSlotRail();
+    renderCrossSection();
+  }
+
+  function currentSlotData() {
+    const zoneView = state.activeZoneView || {};
+    return (zoneView.slots || []).find(slot => slot.slotId === state.activeSlot) || null;
+  }
+
+  function renderCrossSection() {
+    const zoneView = state.activeZoneView;
+    const slot = currentSlotData();
+    $("slotTitle").textContent = slot ? (state.activeSheet + ' / 格 ' + slot.slotId) : '剖面圖';
+    $("slotMeta").textContent = slot ? ('最裡面為第一排，棧板由下往上堆疊。此格共 ' + slot.palletCount + ' 板，最高 ' + slot.maxLevel + ' 層。') : '等待選擇格位';
+
+    if (!zoneView || !slot) {
+      $("crossSection").innerHTML = '<div class="empty">先選一個格位</div>';
+      return;
+    }
+
+    const depthMap = {};
+    (slot.depths || []).forEach(depth => { depthMap[depth.depth] = depth; });
+    const columns = [];
+    for (let depth = 1; depth <= zoneView.maxDepth; depth += 1) {
+      const depthData = depthMap[depth] || { depth, label: '第' + depth + '排', pallets: [] };
+      const pallets = (depthData.pallets || []).slice().sort((a, b) => a.Level - b.Level).map(row => {
+        const selected = row.PalletKey === state.activePalletKey ? 'selected' : '';
+        return '<button class="pallet ' + paletteClass(row) + ' ' + selected + '" onclick="openEditByKey(' + JSON.stringify(row.PalletKey) + ')"><div class="pallet-sku">' + esc(row.SKU || '-') + '</div><div class="pallet-meta"><span>' + esc(row.Batch || '-') + '</span><span>' + esc(row.BoxQty || 0) + ' 箱</span></div><div class="pallet-sub">L' + esc(row.Level) + ' / ' + esc(row.Status || '正常庫存') + '</div></button>';
+      }).join('');
+      columns.push('<div class="depth-col"><div class="depth-head">' + esc(depthData.label) + '</div><div class="stack">' + (pallets || '') + '</div><div class="floor">depth ' + depth + '</div></div>');
+    }
+
+    $("crossSection").innerHTML = '<div class="cross-grid">' + columns.join('') + '</div>';
+  }
+
+  function renderSearch() {
+    const q = $("search").value.trim().toLowerCase();
+    const wrap = $("searchWrap");
+    if (!q) {
+      wrap.classList.add("hidden");
+      $("searchResults").innerHTML = "";
+      return;
+    }
+
+    wrap.classList.remove("hidden");
+    if (!state.searchReady) {
+      $("searchResults").innerHTML = '<div class="empty">全區索引載入中，請稍候 1 到 2 秒再試。</div>';
+      return;
+    }
+
+    const matches = state.searchRows.filter(row => rowText(row).includes(q)).slice(0, 60);
+    if (!matches.length) {
+      $("searchResults").innerHTML = '<div class="empty">找不到符合條件的棧板</div>';
+      return;
+    }
+
+    $("searchResults").innerHTML = matches.map(row => {
+      const depth = row.Depth || 0;
+      const level = row.Level || 0;
+      return '<button class="search-card" onclick="jumpFromSearch(' + JSON.stringify(row.Sheet) + ',' + JSON.stringify(row.Slot) + ',' + JSON.stringify(row.PalletKey || '') + ')"><strong>' + esc(row.SKU || '-') + '</strong><small>' + esc(row.Sheet || '-') + ' / 格 ' + esc(row.Slot || '-') + ' / ' + esc(row.Stack || depth) + '</small><div class="row"><span>' + esc(row.Batch || '-') + '</span><span>' + esc(row.BoxQty || 0) + ' 箱</span></div><div class="row"><span>第 ' + esc(depth || '-') + ' 排</span><span>第 ' + esc(level || '-') + ' 層</span></div></button>';
+    }).join("");
+  }
+
+  async function jumpFromSearch(sheetName, slotId, palletKey) {
+    $("search").value = "";
+    await loadZone(sheetName, slotId, palletKey);
+  }
+
+  function findRowByKey(palletKey) {
+    const slot = currentSlotData();
+    if (!slot) return null;
+    return (slot.pallets || []).find(row => row.PalletKey === palletKey) || null;
+  }
+
+  function openEditByKey(palletKey) {
+    const row = findRowByKey(palletKey);
+    if (!row) return;
+    state.activePalletKey = palletKey;
+    state.editingRow = row;
+    $("editMeta").textContent = [row.Sheet, '格 ' + row.Slot, row.DepthLabel || row.Stack, '第 ' + row.Level + ' 層'].join(' / ');
+    $("editSku").value = row.SKU || '';
+    $("editBatch").value = row.Batch || '';
+    $("editBoxes").value = Number(row.BoxQty || 0);
+    $("editPieces").value = Number(row.PieceQty || 0);
+    $("editStatus").value = row.IsLastPallet ? '最後一板' : (row.Status || '正常庫存');
+    $("editModal").classList.remove("hidden");
+    renderCrossSection();
+  }
+
+  function closeEdit() {
+    if (state.saving) return;
+    state.editingRow = null;
+    $("editModal").classList.add("hidden");
+  }
+
+  async function saveEdit() {
+    if (state.saving || !state.editingRow) return;
+    const oldData = state.editingRow;
+    const newData = {
+      Sheet: oldData.Sheet,
+      SKU: $("editSku").value.trim(),
+      Batch: $("editBatch").value.trim(),
+      BoxQty: $("editBoxes").value,
+      PieceQty: $("editPieces").value,
+      Status: $("editStatus").value
+    };
+    if (!newData.SKU) {
+      setStatus("品號不可空白", "bad");
+      return;
+    }
+
+    state.saving = true;
+    setStatus('正在寫回 ' + oldData.Sheet + ' / 格 ' + oldData.Slot + ' / ' + (oldData.DepthLabel || oldData.Stack) + ' / 第 ' + oldData.Level + ' 層...');
+    try {
+      const result = await gas("updateWarehousePallet", { oldData, newData });
+      state.activeZoneView = result.zoneView;
+      state.editingRow = null;
+      $("editModal").classList.add("hidden");
+      renderSlotRail();
+      renderCrossSection();
+      setStatus('已寫回：' + newData.SKU + '，並重新載入 ' + result.zoneView.sheet, 'ok');
+    } catch (err) {
+      fail(err);
+    } finally {
+      state.saving = false;
+    }
+  }
+
+  $("editModal").addEventListener("click", e => {
+    if (e.target.id === "editModal") closeEdit();
+  });
+  $("search").addEventListener("input", renderSearch);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+</script>

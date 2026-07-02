@@ -1,0 +1,1356 @@
+/* ==========================================================================
+   🎨 鈦傳速智慧倉儲管理系統 - 行動版 CSS 暗黑玻璃微光系統 (Dark Glassmorphism)
+   ========================================================================== */
+
+/* 基礎變數與重設 */
+:root {
+    --bg-app: #07090e;
+    --bg-panel: rgba(18, 24, 38, 0.7);
+    --bg-card: rgba(30, 41, 59, 0.4);
+    --bg-card-hover: rgba(30, 41, 59, 0.65);
+    --border-color: rgba(255, 255, 255, 0.08);
+    
+    --color-primary: #3b82f6;
+    --color-primary-hover: #2563eb;
+    --color-success: #10b981;
+    --color-danger: #ef4444;
+    --color-warning: #f59e0b;
+    --color-text-main: #f8fafc;
+    --color-text-sub: #94a3b8;
+    --color-text-blue: #60a5fa;
+    
+    --status-red-border: rgba(239, 68, 68, 0.6);
+    --status-red-bg: rgba(239, 68, 68, 0.12);
+    --status-yellow-border: rgba(234, 179, 8, 0.6);
+    --status-yellow-bg: rgba(234, 179, 8, 0.12);
+    --status-green-border: rgba(16, 185, 129, 0.6);
+    --status-green-bg: rgba(16, 185, 129, 0.12);
+    
+    --font-outfit: 'Outfit', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --blur-strength: 20px;
+    --transition-speed: 0.25s;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: var(--font-outfit);
+    background-color: var(--bg-app);
+    background-image: 
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
+    background-attachment: fixed;
+    color: var(--color-text-main);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+/* ==========================================================================
+   📱 手機外框與主容器 (Mobile Frame & App Container)
+   ========================================================================== */
+
+.mobile-frame {
+    width: 100%;
+    max-width: 480px;
+    min-height: 100vh;
+    background: #090c15;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+}
+
+/* 在電腦上模擬實體手機質感 */
+@media (min-width: 481px) {
+    .mobile-frame {
+        margin: 24px auto;
+        height: 880px;
+        min-height: 880px;
+        border-radius: 40px;
+        border: 10px solid #1e293b;
+        overflow: hidden;
+        box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9);
+    }
+}
+
+.app-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    overflow: hidden; /* Lock header at the top */
+}
+
+/* ==========================================================================
+   🧱 頂部 Header 樣式
+   ========================================================================== */
+
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 4px 14px 4px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 12px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo-icon {
+    font-size: 24px;
+    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.4));
+}
+
+.brand-text h1 {
+    font-size: 17px;
+    font-weight: 700;
+    background: linear-gradient(120deg, #ffffff, #cbd5e1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.sub-title {
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--color-text-sub);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.btn-icon {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-color);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all var(--transition-speed);
+}
+
+.btn-icon:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* ==========================================================================
+   🔍 搜尋欄與自動完成建議 (Search Section)
+   ========================================================================== */
+
+.search-section {
+    position: relative;
+    margin-bottom: 14px;
+}
+
+.search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-icon {
+    position: absolute;
+    left: 12px;
+    font-size: 14px;
+    color: var(--color-text-sub);
+    pointer-events: none;
+}
+
+#search-input {
+    width: 100%;
+    background: rgba(30, 41, 59, 0.65);
+    border: 1.5px solid var(--border-color);
+    border-radius: 12px;
+    padding: 11px 36px 11px 36px;
+    color: var(--color-text-main);
+    font-size: 13.5px;
+    font-family: var(--font-outfit);
+    transition: all var(--transition-speed);
+}
+
+#search-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+    background: rgba(30, 41, 59, 0.9);
+}
+
+.search-clear-btn {
+    position: absolute;
+    right: 12px;
+    background: none;
+    border: none;
+    color: var(--color-text-sub);
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.search-clear-btn:hover {
+    color: var(--color-text-main);
+}
+
+/* 搜尋下拉選單建議 */
+.search-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background: #111827;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    margin-top: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+}
+
+.suggestion-item {
+    padding: 10px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: space-between;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover, .suggestion-item.active {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--color-text-blue);
+}
+
+.suggestion-desc {
+    font-size: 11px;
+    color: var(--color-text-sub);
+}
+
+/* ==========================================================================
+   🎛️ 橫向捲動分區選取器 (Scrolling Chips Tab selector)
+   ========================================================================== */
+
+.area-chips-container {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    scrollbar-width: none;
+    margin-bottom: 12px;
+}
+
+.area-chips-container::-webkit-scrollbar {
+    display: none;
+}
+
+.chip {
+    flex: 0 0 auto;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--color-text-sub);
+    padding: 7px 15px;
+    border-radius: 20px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-speed);
+}
+
+.chip:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--color-text-main);
+}
+
+.chip.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+}
+
+/* ==========================================================================
+   📊 統計數據條 (Stats Ribbon)
+   ========================================================================== */
+
+.stats-ribbon {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    background: rgba(30, 41, 59, 0.25);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 8px 6px;
+    margin-bottom: 12px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stat-item:last-child {
+    border-right: none;
+}
+
+.stat-item .stat-label {
+    font-size: 10px;
+    color: var(--color-text-sub);
+    margin-bottom: 2px;
+}
+
+.stat-item .stat-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text-main);
+}
+
+/* 操作提示 */
+.interaction-tip {
+    background: rgba(59, 130, 246, 0.06);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.tip-icon {
+    font-size: 13px;
+}
+
+.tip-text {
+    font-size: 11px;
+    color: #93c5fd;
+    line-height: 1.35;
+}
+
+/* ==========================================================================
+   🧱 倉庫庫位網格 (Workspace Slots Table)
+   ========================================================================== */
+
+.grid-workspace {
+    flex: 1;
+    overflow: hidden; /* Avoid double scrollbars */
+    display: flex;
+    flex-direction: column;
+}
+
+.lane-section {
+    background: var(--bg-panel);
+    border: 1.5px solid var(--border-color);
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 0px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+
+.lane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+}
+
+.lane-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-text-main);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.lane-title::before {
+    content: "";
+    display: inline-block;
+    width: 3px;
+    height: 13px;
+    background: var(--color-primary);
+    border-radius: 1.5px;
+}
+
+.grid-container-outer {
+    width: 100%;
+    flex: 1;
+    overflow: auto; /* Enable both horizontal and vertical scrolling */
+    scrollbar-width: thin;
+}
+
+.grid-table {
+    display: grid;
+    gap: 10px 8px;
+    align-items: stretch;
+    min-width: 360px;
+}
+
+.label-column-header {
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 40;
+    background: #0d1322 !important; /* Solid background matching panel */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-text-sub);
+    border: 1.5px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.stack-header-cell {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: #0d1322 !important;
+    border: 1.5px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 4px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-main);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.slot-label-cell {
+    position: sticky;
+    left: 0;
+    z-index: 20;
+    background: #0d1322 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--color-text-sub);
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 2px 0 4px rgba(0,0,0,0.4);
+}
+
+.slot-cell {
+    background: rgba(255, 255, 255, 0.01);
+    border: 1.5px dashed rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 5px;
+    transition: all var(--transition-speed);
+    position: relative;
+    min-height: 80px;
+    height: auto;
+}
+
+.slot-cell.drag-over {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: var(--color-primary);
+}
+
+.slot-cell.selected {
+    border-color: var(--color-warning);
+    background: rgba(245, 158, 11, 0.03);
+}
+
+/* ==========================================================================
+   🗂️ 棧板卡片元件 (Pallet Card)
+   ========================================================================== */
+
+.pallet-card {
+    width: 100%;
+    min-height: 68px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.pallet-card:hover {
+    background: var(--bg-card-hover);
+}
+
+.pallet-sku {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-main);
+    word-break: break-all;
+    line-height: 1.2;
+}
+
+.pallet-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    gap: 4px;
+}
+
+.batch-badge {
+    font-size: 8px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text-sub);
+    padding: 1px 3px;
+    border-radius: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.qty-badge {
+    font-size: 8.5px;
+    font-weight: 700;
+    background: rgba(59, 130, 246, 0.12);
+    color: #93c5fd;
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 0.5px solid rgba(59, 130, 246, 0.2);
+}
+
+.last-pallet-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 5px;
+    height: 5px;
+    background-color: var(--color-text-blue);
+    border-radius: 50%;
+    box-shadow: 0 0 4px var(--color-primary);
+}
+
+.pallet-card.is-last-pallet .pallet-sku {
+    color: var(--color-text-blue);
+}
+
+/* 邊框判定 */
+.pallet-card.status-mixed {
+    border-color: var(--status-red-border);
+}
+
+.pallet-card.status-project {
+    border-color: var(--status-green-border);
+}
+
+/* 搜尋高亮呼吸燈動畫 */
+@keyframes pulse-highlight {
+    0% { box-shadow: 0 0 0 0px rgba(245, 158, 11, 0.8); border-color: #f59e0b; }
+    50% { box-shadow: 0 0 10px 4px rgba(245, 158, 11, 0.3); border-color: #f59e0b; }
+    100% { box-shadow: 0 0 0 0px rgba(245, 158, 11, 0); border-color: #f59e0b; }
+}
+
+.pallet-card.search-highlighted {
+    animation: pulse-highlight 1.5s infinite;
+    border-color: #f59e0b !important;
+    transform: scale(1.02);
+    z-index: 10;
+}
+
+/* 點選搬移選取搖擺狀態 */
+@keyframes wiggle {
+    0% { transform: rotate(-0.8deg) scale(1.01); }
+    100% { transform: rotate(0.8deg) scale(1.01); }
+}
+
+.pallet-card.selected-for-move {
+    outline: 2.5px dashed var(--color-warning);
+    outline-offset: 1px;
+    animation: wiggle 0.2s infinite alternate;
+    z-index: 15;
+}
+
+/* ==========================================================================
+   🔼 行動端底部滑出面板 (Bottom Sheet Modal System)
+   ========================================================================== */
+
+.bottom-sheet-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-speed) ease;
+    z-index: 1000;
+}
+
+.bottom-sheet-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* 在電腦框架中，把底部抽屜鎖在手機框內 */
+@media (min-width: 481px) {
+    .bottom-sheet-overlay {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 30px;
+    }
+}
+
+.bottom-sheet {
+    width: 100%;
+    max-height: 82%;
+    background: #0f172a;
+    border-top: 1.5px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px 20px 0 0;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.bottom-sheet-overlay.active .bottom-sheet {
+    transform: translateY(0);
+}
+
+.sheet-handle {
+    width: 36px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 2px;
+    margin: 8px auto 4px auto;
+    flex: 0 0 auto;
+}
+
+.sheet-header {
+    padding: 10px 18px 12px 18px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.sheet-header h3 {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.sheet-close {
+    background: none;
+    border: none;
+    color: var(--color-text-sub);
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.sheet-body {
+    padding: 14px 18px 24px 18px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ==========================================================================
+   🏛️ 分公司標籤卡與核對面板 (Metadata & Verification Card)
+   ========================================================================== */
+
+/* 分公司切換標籤頁 */
+.branch-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: -4px;
+}
+
+.branch-tab {
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    color: var(--color-text-sub);
+    cursor: pointer;
+    transition: all var(--transition-speed);
+}
+
+.branch-tab.active {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: var(--color-primary);
+    color: var(--color-text-blue);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.25);
+}
+
+/* 規格對照卡片 */
+.metadata-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.metadata-title-block {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 8px;
+}
+
+.branch-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1e293b;
+    background: #cbd5e1;
+    padding: 2px 6px;
+    border-radius: 5px;
+}
+
+.branch-badge.gaoyaci { background: #93c5fd; color: #1e3a8a; }
+.branch-badge.antigravity { background: #c084fc; color: #4a044e; }
+.branch-badge.shiona { background: #6ee7b7; color: #064e3b; }
+
+.sku-display {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text-main);
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 12px;
+}
+
+.meta-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.meta-lbl {
+    font-size: 10px;
+    color: var(--color-text-sub);
+}
+
+.meta-val {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-text-main);
+}
+
+/* 批號與庫存核對控制板 */
+.verification-panel {
+    margin-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 10px;
+}
+
+.verif-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.verif-status-bar.matched {
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.verif-status-bar.mismatched {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.verif-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.verif-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+}
+
+.verif-lbl {
+    color: var(--color-text-sub);
+}
+
+.verif-val {
+    color: var(--color-text-main);
+    font-weight: 700;
+}
+
+/* ==========================================================================
+   📝 編輯實體欄位表單與數值按鍵 (Form Fields & Steppers)
+   ========================================================================== */
+
+.pallet-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 14px;
+}
+
+.form-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-text-sub);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: end;
+}
+
+.input-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.input-field label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-text-sub);
+}
+
+.input-field input[type="text"],
+.input-field select,
+.input-field textarea {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--color-text-main);
+    font-family: var(--font-outfit);
+    font-size: 13px;
+    transition: border-color var(--transition-speed);
+}
+
+.input-field input[type="text"]:focus,
+.input-field select:focus,
+.input-field textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+/* 開關 Toggle 佈局 */
+.toggle-field {
+    padding-bottom: 6px;
+}
+
+.toggle-switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.toggle-switch input {
+    display: none;
+}
+
+.slider {
+    width: 34px;
+    height: 18px;
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 18px;
+    position: relative;
+    transition: background-color var(--transition-speed);
+}
+
+.slider::before {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: white;
+    top: 2px;
+    left: 2px;
+    transition: transform var(--transition-speed);
+}
+
+.toggle-switch input:checked + .slider {
+    background-color: var(--color-primary);
+}
+
+.toggle-switch input:checked + .slider::before {
+    transform: translateX(16px);
+}
+
+.toggle-lbl {
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* 微調步進器 (Steppers) */
+.qty-steppers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.stepper-group {
+    background: rgba(30, 41, 59, 0.2);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.stepper-group label {
+    font-size: 10px;
+    color: var(--color-text-sub);
+    text-align: center;
+}
+
+.stepper-control {
+    display: flex;
+    align-items: center;
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.step-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-main);
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.step-btn:active {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.stepper-control input[type="number"] {
+    flex: 1;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--color-text-main);
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    font-family: var(--font-outfit);
+}
+
+.stepper-control input[type="number"]:focus {
+    outline: none;
+}
+
+/* Chrome, Safari, Edge, Opera number button removal */
+.stepper-control input::-webkit-outer-spin-button,
+.stepper-control input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.quick-adjust {
+    display: flex;
+    gap: 6px;
+}
+
+.quick-btn {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1.5px solid var(--border-color);
+    border-radius: 4px;
+    padding: 4px 0;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--color-text-main);
+    cursor: pointer;
+    font-family: var(--font-outfit);
+}
+
+.quick-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.quick-btn:active {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+/* 面板底端 */
+.sheet-footer {
+    padding: 14px 18px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.footer-actions-right {
+    display: flex;
+    gap: 8px;
+}
+
+/* ==========================================================================
+   🔘 按鈕基本系統
+   ========================================================================== */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-outfit);
+    transition: all var(--transition-speed);
+}
+
+.btn-primary {
+    background: var(--color-primary);
+    color: white;
+}
+
+.btn-primary:active {
+    background: var(--color-primary-hover);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-text-main);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:active {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, 0.12);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.btn-danger:active {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+/* Spin 載入效果 */
+.loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 50px 0;
+    gap: 12px;
+}
+
+.spinner {
+    width: 28px;
+    height: 28px;
+    border: 2.5px solid rgba(255, 255, 255, 0.05);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s infinite linear;
+}
+
+#sync-overlay {
+    align-items: center !important;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 儲位剖面側視圖樣式 */
+.profile-location-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text-main);
+    margin-bottom: 5px;
+    text-align: center;
+    background: rgba(59, 130, 246, 0.08);
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(59, 130, 246, 0.15);
+}
+
+.profile-tip {
+    font-size: 11px;
+    color: var(--color-text-sub);
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.vertical-rack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.rack-level {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    align-items: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: rgba(30, 41, 59, 0.35);
+    transition: all var(--transition-speed);
+}
+
+.level-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-sub);
+    text-align: center;
+    border-right: 1.5px solid rgba(255, 255, 255, 0.08);
+    padding-right: 10px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.level-content {
+    padding-left: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.level-info-block {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+}
+
+.level-sku {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--color-text-main);
+    word-break: break-all;
+}
+
+.level-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.level-content.empty-level {
+    color: var(--color-text-sub);
+    font-style: italic;
+    font-size: 12px;
+    justify-content: space-between;
+}
+
+.btn-profile-swap {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid var(--color-warning);
+    color: #fbbf24;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all var(--transition-speed);
+    white-space: nowrap;
+}
+
+.btn-profile-swap:active {
+    background: rgba(245, 158, 11, 0.3);
+}
+
+.btn-profile-place {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid var(--color-primary);
+    color: var(--color-text-blue);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all var(--transition-speed);
+    white-space: nowrap;
+}
+
+.btn-profile-place:active {
+    background: rgba(59, 130, 246, 0.3);
+}
+
+/* 所屬分公司判定樣式 */
+.owner-verdict {
+    margin-bottom: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 12px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.owner-verdict.detected {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1.5px solid rgba(16, 185, 129, 0.25);
+    color: #34d399;
+}
+
+.owner-verdict.unresolved {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1.5px solid rgba(245, 158, 11, 0.25);
+    color: #fbbf24;
+}
+
+/* 產品圖片顯示樣式 */
+.product-image-wrapper {
+    width: 100%;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1.5px solid var(--border-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 6px;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+#meta-image {
+    max-width: 100%;
+    max-height: 160px;
+    border-radius: 8px;
+    object-fit: contain;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    transition: transform var(--transition-speed);
+}
+
+#meta-image:hover {
+    transform: scale(1.03);
+}
+
+/* 雲端資料夾連結按鈕 */
+.folder-link-btn {
+    font-size: 11px;
+    font-weight: 500;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    transition: all var(--transition-speed);
+}
+
+.folder-link-btn:hover {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.5);
+    color: #7dd3fc;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+}
+
+/* 電腦版模式覆蓋樣式 */
+body.desktop-mode .mobile-frame {
+    max-width: 100% !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+body.desktop-mode .app-container {
+    padding: 24px;
+}
+
+body.desktop-mode .grid-workspace {
+    flex: 1;
+    overflow: hidden;
+}
+
+/* 在電腦版上，使剖面圖側欄或底欄在寬螢幕下更加寬敞美觀 */
+body.desktop-mode .bottom-sheet {
+    max-width: 600px;
+    margin: 0 auto;
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+}
+

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🚚 鈦傳速智慧倉儲管理系統 - 手機版庫位</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <!-- Mobile Container Frame -->
+    <div class="mobile-frame">
+        <div class="app-container">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="brand">
+                    <div class="logo-icon">🚚</div>
+                    <div class="brand-text">
+                        <h1>鈦傳速智慧庫位</h1>
+                        <span class="sub-title">2026 Logistics Mobile</span>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button id="sync-data-btn" class="btn-icon" title="同步雲端最新資料">
+                        🔄
+                    </button>
+                    <button id="view-toggle-btn" class="btn-icon" title="切換電腦版/手機版">
+                        🖥️
+                    </button>
+                    <button id="export-json-btn" class="btn-icon" title="匯出 JSON">
+                        📥
+                    </button>
+                </div>
+            </header>
+
+            <!-- Search Bar Section -->
+            <section class="search-section" id="search-container">
+                <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="search-input" placeholder="輸入品號/漢樺編號搜尋 (例: RC12017)..." autocomplete="off">
+                    <button id="search-clear-btn" class="search-clear-btn" style="display: none;">&times;</button>
+                </div>
+                <div class="search-suggestions" id="search-suggestions" style="display: none;"></div>
+            </section>
+
+            <!-- Area Selector Tabs (Chips) -->
+            <section class="area-chips-container" id="area-chips-container">
+                <!-- Dynamically populated scrollable chips: <button class="chip active">B-G區</button> -->
+            </section>
+            
+            <!-- Hidden selector to keep original JS bindings if any -->
+            <select id="sheet-selector" style="display: none;"></select>
+
+            <!-- Stats Ribbon -->
+            <section class="stats-ribbon">
+                <div class="stat-item">
+                    <span class="stat-label">板數</span>
+                    <span id="stat-total-pallets" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">箱數</span>
+                    <span id="stat-total-boxes" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">片數</span>
+                    <span id="stat-total-pieces" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">區域</span>
+                    <span id="stat-active-sheet" class="stat-value">-</span>
+                </div>
+            </section>
+
+            <!-- Helper Notice -->
+            <div class="interaction-tip">
+                <span class="tip-icon">💡</span>
+                <span class="tip-text">點選卡片開啟明細核對批號；選中後點擊空格可搬移/交換。</span>
+            </div>
+
+            <!-- Grid Workspace -->
+            <main class="grid-workspace" id="grid-workspace">
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>資料加載中，請稍候...</p>
+                </div>
+            </main>
+        </div>
+
+        <!-- Bottom Sheet Details Overlay -->
+        <div class="bottom-sheet-overlay" id="edit-modal">
+            <div class="bottom-sheet">
+                <!-- Swipe Indicator Handle -->
+                <div class="sheet-handle"></div>
+                
+                <header class="sheet-header">
+                    <h3>庫位與規格明細</h3>
+                    <button class="sheet-close" id="modal-close-btn">&times;</button>
+                </header>
+                
+                <div class="sheet-body">
+                    <!-- Branch Info Tabs -->
+                    <div class="branch-tabs" id="meta-branch-tabs" style="display: none;">
+                        <!-- Dynamically populated branch tabs -->
+                    </div>
+
+                    <!-- Enriched Product Metadata Card -->
+                    <div class="metadata-card" id="metadata-card" style="display: none;">
+                        <div class="metadata-title-block">
+                            <span class="branch-badge" id="meta-company">-</span>
+                            <span class="sku-display" id="meta-sku-display">-</span>
+                            <a id="meta-folder-btn" href="#" target="_blank" class="folder-link-btn" style="display: none;">📁 雲端圖片</a>
+                        </div>
+                        <div class="owner-verdict" id="meta-owner-verdict" style="display: none;"></div>
+                        <div class="product-image-wrapper" id="meta-image-wrapper" style="display: none;">
+                            <img id="meta-image" src="" alt="單片圖">
+                        </div>
+                        <div class="metadata-grid">
+                            <div class="meta-cell"><span class="meta-lbl">廠牌</span><span class="meta-val" id="meta-brand">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">產地</span><span class="meta-val" id="meta-origin">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">英文系列</span><span class="meta-val" id="meta-series">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">中文系列</span><span class="meta-val" id="meta-chinese-series">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">原廠品名</span><span class="meta-val" id="meta-original-name">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">表定尺寸</span><span class="meta-val" id="meta-size">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">包裝片/箱</span><span class="meta-val" id="meta-pcs-box">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">箱重 KG</span><span class="meta-val" id="meta-kg-box">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">預估箱/板</span><span class="meta-val" id="meta-box-pallet">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">預估板重</span><span class="meta-val" id="meta-kg-pallet">-</span></div>
+                            <div class="meta-cell"><span class="meta-lbl">同行牌價</span><span class="meta-val" id="meta-price">-</span></div>
+                        </div>
+                        
+                        <!-- Batch and Stock Verification Panel -->
+                        <div class="verification-panel">
+                            <div class="verif-status-bar" id="verification-status">
+                                <span class="status-icon">⚠️</span>
+                                <span class="status-text">批號未比對</span>
+                            </div>
+                            <div class="verif-details">
+                                <div class="verif-row">
+                                    <span class="verif-lbl">庫存表官方批號</span>
+                                    <strong class="verif-val" id="meta-official-batch">-</strong>
+                                </div>
+                                <div class="verif-row">
+                                    <span class="verif-lbl">庫存表可用數量</span>
+                                    <strong class="verif-val"><span id="meta-stock-pieces">-</span> 片</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Physical Pallet Form (Editable fields) -->
+                    <div class="pallet-form">
+                        <h4 class="form-title">編輯實體棧板內容</h4>
+                        <div class="form-row">
+                            <div class="input-field">
+                                <label for="edit-sku">網格編號 SKU</label>
+                                <input type="text" id="edit-sku" placeholder="請輸入編號">
+                            </div>
+                            <div class="input-field">
+                                <label for="edit-batch">實體批號 Batch</label>
+                                <input type="text" id="edit-batch" placeholder="請輸入批號">
+                            </div>
+                        </div>
+
+                        <!-- Quantity Steppers -->
+                        <div class="qty-steppers">
+                            <div class="stepper-group">
+                                <label>箱數 (Boxes)</label>
+                                <div class="stepper-control">
+                                    <button class="step-btn btn-minus" data-target="box" data-value="-1">-</button>
+                                    <input type="number" id="edit-box-qty" min="0" step="1" value="0">
+                                    <button class="step-btn btn-plus" data-target="box" data-value="1">+</button>
+                                </div>
+                                <div class="quick-adjust">
+                                    <button class="quick-btn" data-target="box" data-value="-10">-10</button>
+                                    <button class="quick-btn" data-target="box" data-value="10">+10</button>
+                                </div>
+                            </div>
+
+                            <div class="stepper-group">
+                                <label>片數 (Pieces)</label>
+                                <div class="stepper-control">
+                                    <button class="step-btn btn-minus" data-target="piece" data-value="-1">-</button>
+                                    <input type="number" id="edit-piece-qty" min="0" step="1" value="0">
+                                    <button class="step-btn btn-plus" data-target="piece" data-value="1">+</button>
+                                </div>
+                                <div class="quick-adjust">
+                                    <button class="quick-btn" data-target="piece" data-value="-10">-10</button>
+                                    <button class="quick-btn" data-target="piece" data-value="10">+10</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Status selector and Last Pallet toggle -->
+                        <div class="form-row">
+                            <div class="input-field">
+                                <label for="edit-status">棧板狀態 (顏色設定)</label>
+                                <select id="edit-status">
+                                    <option value="正常庫存">正常庫存 (無底色)</option>
+                                    <option value="混板/散板">混板/散板 (紅色/黃色發光)</option>
+                                    <option value="專案庫存">專案庫存 (綠色發光)</option>
+                                </select>
+                            </div>
+                            <div class="input-field toggle-field">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="edit-last-pallet">
+                                    <span class="slider"></span>
+                                    <span class="toggle-lbl">最後一板 (藍字標記)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="input-field">
+                            <label for="edit-remarks">倉管備註</label>
+                            <textarea id="edit-remarks" rows="2" placeholder="輸入備註或異常狀態..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <footer class="sheet-footer">
+                    <button id="modal-delete-btn" class="btn btn-danger">🗑️ 刪除棧板</button>
+                    <div class="footer-actions-right">
+                        <button id="modal-cancel-btn" class="btn btn-secondary">取消</button>
+                        <button id="modal-save-btn" class="btn btn-primary">💾 儲存修改</button>
+                    </div>
+                </footer>
+            </div>
+        </div>
+
+        <!-- Cross-section profile move panel modal -->
+        <div class="bottom-sheet-overlay" id="cross-section-modal">
+            <div class="bottom-sheet">
+                <div class="sheet-handle"></div>
+                
+                <header class="sheet-header">
+                    <h3>📦 儲位剖面堆疊圖 (側視圖)</h3>
+                    <button class="sheet-close" id="profile-close-btn">&times;</button>
+                </header>
+                
+                <div class="sheet-body">
+                    <div class="profile-location-title" id="profile-location-title">
+                        A-A區 / 第一排 / 列 1
+                    </div>
+                    <p class="profile-tip">請選擇要放置的層級或欲對調的棧板：</p>
+                    
+                    <!-- Vertical Stack Levels -->
+                    <div class="vertical-rack" id="profile-vertical-rack">
+                        <!-- Rendered dynamically by JS -->
+                    </div>
+                </div>
+                
+                <footer class="sheet-footer">
+                    <div style="flex: 1;"></div>
+                    <button id="profile-cancel-btn" class="btn btn-secondary">取消移動</button>
+                </footer>
+            </div>
+        </div>
+
+        <!-- Sync Data Loading Overlay -->
+        <div class="bottom-sheet-overlay" id="sync-overlay">
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; color: white; gap: 16px; padding: 24px; text-align: center;">
+                <div class="spinner" style="width: 50px; height: 50px; border-width: 4px;"></div>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.5px;">正在同步雲端最新資料...</h3>
+                <p style="margin: 0; font-size: 13px; opacity: 0.85; max-width: 300px; line-height: 1.6;">系統正在讀取雲端主倉庫佈局與三分公司定價及庫存表。此作業預計耗時 10 至 30 秒，請耐心等候，切勿關閉此視窗。</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Entry -->
+    <script src="app.js"></script>
+</body>
+</html>

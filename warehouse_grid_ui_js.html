@@ -1,0 +1,1644 @@
+<script>
+  const state = {
+    sheets: [],
+    activeSheet: "",
+    activeZoneView: null,
+    activeSlot: "",
+    activeDepth: 0,
+    activePalletKey: "",
+    activeItemKey: "",
+    searchRows: [],
+    searchReady: false,
+    editingRow: null,
+    saving: false,
+    zoomScale: 1.0,
+    // 移動模式
+    movingKey: "",
+    movingRow: null,
+    movingGroupId: "",
+    movingGroupKeys: [],
+    moveDestSheet: "",   // 目的地分頁（支援跨分頁）
+    moveDestZoneView: null,
+    moveDestSlot: "",
+    moveDestDepth: 0,
+    moveDestLevel: 1,
+    movePending: null   // { destSlot, destDepth, destLevel }
+  };
+
+  const $ = id => document.getElementById(id);
+
+  // ===== 操作者 =====
+  function getOperator() {
+    var el = $('operatorInput');
+    return (el && el.value.trim()) || localStorage.getItem('wms_operator') || '';
+  }
+  function saveOperator() {
+    var el = $('operatorInput');
+    if (!el) return;
+    var v = el.value.trim();
+    localStorage.setItem('wms_operator', v);
+    el.classList.toggle('warn', !v);
+  }
+  function initOperator() {
+    var el = $('operatorInput');
+    if (!el) return;
+    var saved = localStorage.getItem('wms_operator') || '';
+    el.value = saved;
+    el.classList.toggle('warn', !saved);
+  }
+  // ===== /操作者 =====
+
+  // Warehouse map config. dir: L=left, R=right, U=up, D=down
+  var ZONE_LAYOUTS = {
+    A: { vw:300, vh:185,
+      extras:[ {x:0,y:0,w:26,h:34,fill:'#06101c',label:'WC'}, {x:258,y:0,w:18,h:140,fill:'#020709',label:'PASS',rot:true} ],
+      zones:{ A:{x:26,y:0,w:232,h:34,dir:'L',max:38}, B:{x:276,y:0,w:24,h:140,dir:'U',max:10}, C:{x:0,y:34,w:26,h:106,dir:'U',max:27}, D:{x:26,y:34,w:196,h:53,dir:'L',max:27}, E:{x:26,y:87,w:196,h:53,dir:'R',max:14}, F:{x:222,y:34,w:36,h:106,dir:'U',max:28}, G:{x:0,y:155,w:276,h:30,dir:'L',max:35} }
+    },
+    B: { vw:300, vh:185,
+      extras:[ {x:0,y:0,w:26,h:34,fill:'#06101c',label:'WC'}, {x:258,y:0,w:18,h:140,fill:'#020709',label:'PASS',rot:true} ],
+      zones:{ A:{x:26,y:0,w:232,h:34,dir:'L',max:38}, B:{x:276,y:0,w:24,h:140,dir:'U',max:6}, C:{x:0,y:34,w:26,h:106,dir:'U',max:20}, D:{x:26,y:34,w:196,h:53,dir:'L',max:36}, E:{x:26,y:87,w:196,h:53,dir:'R',max:37}, F:{x:222,y:34,w:36,h:106,dir:'U',max:11}, G:{x:0,y:155,w:276,h:30,dir:'L',max:40} }
+    },
+    C: { vw:300, vh:200,
+      extras:[ {x:164,y:0,w:22,h:200,fill:'#020709',label:'PASS',rot:true} ],
+      zones:{ A:{x:0,y:0,w:26,h:200,dir:'U',max:24}, B:{x:26,y:0,w:38,h:200,dir:'D',max:38}, C:{x:64,y:0,w:34,h:200,dir:'U',max:35}, D:{x:98,y:0,w:34,h:200,dir:'D',max:35}, E:{x:132,y:0,w:32,h:200,dir:'U',max:35}, F:{x:186,y:0,w:34,h:200,dir:'U',max:35}, G:{x:220,y:0,w:40,h:200,dir:'U',max:15}, H:{x:260,y:0,w:40,h:200,dir:'D',max:15} }
+    }
+  };
+
+  function getMarkerXY(zone, slotNum) {
+    var n = Math.max(1, Math.min(slotNum || 1, zone.max));
+    var t = zone.max <= 1 ? 0.5 : (n - 1) / (zone.max - 1);
+    var x = zone.x, y = zone.y, w = zone.w, h = zone.h, dir = zone.dir;
+    var pad = 6;
+    if (dir === 'L') return { mx: x + w - pad - t*(w-2*pad), my: y+h/2 };
+    if (dir === 'R') return { mx: x + pad + t*(w-2*pad),     my: y+h/2 };
+    if (dir === 'U') return { mx: x+w/2, my: y + h - pad - t*(h-2*pad) };
+    if (dir === 'D') return { mx: x+w/2, my: y + pad + t*(h-2*pad) };
+    return { mx: x+w/2, my: y+h/2 };
+  }
+
+  var DIR_ARROW = { L: '←', R: '→', U: '↑', D: '↓' };
+
+  function skuHtml(sku) {
+    return esc(String(sku || '-'));
+  }
+
+  // ===== 移動模式 =====
+  var _mt = { timer: null, startX: 0, startY: 0, dragging: false, ghost: null, overZone: null };
+
+  function startMoveMode(palletKey) {
+    var row = findRowByKey(palletKey);
+    if (!row) return;
+    state.movingKey = palletKey;
+    state.movingRow = row;
+    state.moveDestSheet = state.activeSheet;
+    state.moveDestZoneView = state.activeZoneView;
+    // 找出同一物理棧板（PalletGroupId 相同）的所有 keys
+    var groupId = row.PalletGroupId || palletKey;
+    state.movingGroupId = groupId;
+    var groupKeys = [];
+    var zv = state.activeZoneView;
+    if (zv) {
+      (zv.slots || []).forEach(function(s) {
+        (s.pallets || []).forEach(function(p) {
+          if ((p.PalletGroupId || p.PalletKey) === groupId) groupKeys.push(p.PalletKey);
+        });
+      });
+    }
+    state.movingGroupKeys = groupKeys.length > 0 ? groupKeys : [palletKey];
+    state.moveDestSlot = state.activeSlot;   // 預設同格子
+    state.moveDestDepth = 0;
+    state.moveDestLevel = 1;
+    if (navigator.vibrate) navigator.vibrate(40);
+    var _sy = window.scrollY;
+    var _cross = $('crossSection');
+    var _sx = _cross ? _cross.scrollLeft : 0;
+    state._suppressFocus = true;
+    renderDetailPanel();
+    window.scrollTo(0, _sy);
+    var _cross2 = $('crossSection');
+    if (_cross2) _cross2.scrollLeft = _sx;
+    setTimeout(function() { state._suppressFocus = false; }, 200);
+  }
+
+  function cancelMoveMode() {
+    if (state.saving) return; // 寫入中不允許取消
+    state.movingKey = '';
+    state.movingRow = null;
+    state.movingGroupId = '';
+    state.movingGroupKeys = [];
+    state.moveDestSheet = '';
+    state.moveDestZoneView = null;
+    state.moveDestSlot = '';
+    state.moveDestDepth = 0;
+    state.movePending = null;
+    _destroyGhost();
+    closeMoveSlotPicker();
+    closeMoveConfirm();
+    renderDetailPanel();
+  }
+
+  function _destroyGhost() {
+    if (_mt.ghost) { _mt.ghost.remove(); _mt.ghost = null; }
+    if (_mt.overZone) { _mt.overZone.classList.remove('active'); _mt.overZone = null; }
+    _mt.dragging = false;
+  }
+
+  function _createGhost(x, y) {
+    _destroyGhost();
+    var row = state.movingRow;
+    if (!row) return;
+    var g = document.createElement('div');
+    g.className = 'move-ghost';
+    g.innerHTML = '<div>' + skuHtml(row.SKU || '-') + '</div><div style="font-size:10px;margin-top:3px;opacity:.8">' + esc(row.Batch || '') + '</div>';
+    g.style.left = (x - 55) + 'px';
+    g.style.top  = (y - 40) + 'px';
+    document.body.appendChild(g);
+    _mt.ghost = g;
+    _mt.dragging = true;
+  }
+
+  // Drop zone hit test (touch position)
+  function _updateGhostPos(x, y) {
+    if (_mt.ghost) { _mt.ghost.style.left = (x-55)+'px'; _mt.ghost.style.top = (y-40)+'px'; }
+    _mt.ghost && (_mt.ghost.style.pointerEvents = 'none');
+    var el = document.elementFromPoint(x, y);
+    _mt.ghost && (_mt.ghost.style.pointerEvents = '');
+    var zone = el && el.closest ? el.closest('.drop-zone') : null;
+    if (zone !== _mt.overZone) {
+      if (_mt.overZone) _mt.overZone.classList.remove('active');
+      _mt.overZone = zone;
+      if (zone) zone.classList.add('active');
+    }
+  }
+
+  function _dropOnZone() {
+    var zone = _mt.overZone;
+    _destroyGhost();
+    if (!zone) return;
+    var d = Number(zone.dataset.depth);
+    var l = Number(zone.dataset.level);
+    openMoveConfirm(state.activeSlot, d, l);
+  }
+
+  // 選格子 overlay（支援跨分頁）
+  function openMoveSlotPicker() {
+    var row = state.movingRow;
+    var meta = $('moveSlotMeta');
+    if (meta && row) meta.textContent = (row.SKU || '-') + ' / ' + (row.Batch || '');
+    if (!state.moveDestSheet) state.moveDestSheet = state.activeSheet;
+    if (!state.moveDestZoneView) state.moveDestZoneView = state.activeZoneView;
+    var dp = $('moveDepthPicker');
+    if (dp) dp.classList.add('hidden');
+    _renderMoveZoneChips();
+    _renderMoveSlotList();
+    $('moveSlotOverlay').classList.remove('hidden');
+  }
+
+  function _renderMoveZoneChips() {
+    var zoneRow = $('moveZoneRow');
+    if (!zoneRow) return;
+    zoneRow.innerHTML = (state.sheets || []).map(function(s) {
+      var active = s.name === state.moveDestSheet ? ' selected' : '';
+      return '<button class="move-zone-chip' + active + '" onclick="selectMoveSheet(' + JSON.stringify(s.name) + ')">' + esc(s.name) + '</button>';
+    }).join('');
+  }
+
+  function _renderMoveSlotList() {
+    var zv = state.moveDestZoneView;
+    var list = $('moveSlotList');
+    if (!list) return;
+    if (!zv) { list.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">載入中…</div>'; return; }
+    var srcRow = state.movingRow;
+    list.innerHTML = (zv.slots || []).map(function(s) {
+      var isSrc = state.moveDestSheet === (srcRow && srcRow.Sheet) &&
+                  s.slotId === (srcRow ? String(srcRow.Slot) : '');
+      var sel = isSrc ? ' selected' : '';
+      return '<button class="move-slot-chip' + sel + '" data-slotid="' + esc(s.slotId) + '" onclick="selectMoveSlot(' + JSON.stringify(s.slotId) + ')">' +
+        esc(s.slotId) + '<small>' + esc(s.palletCount) + '板</small></button>';
+    }).join('');
+  }
+
+  async function selectMoveSheet(sheetName) {
+    state.moveDestSheet = sheetName;
+    state.moveDestSlot = '';
+    state.moveDestDepth = 0;
+    var dp = $('moveDepthPicker');
+    if (dp) dp.classList.add('hidden');
+    // 更新 zone chip 高亮
+    var zoneRow = $('moveZoneRow');
+    if (zoneRow) zoneRow.querySelectorAll('.move-zone-chip').forEach(function(b) {
+      b.classList.toggle('selected', b.textContent === sheetName);
+    });
+    // 從快取取，或前景載入
+    var zv = cacheGet('zone_' + sheetName);
+    if (!zv && sheetName === state.activeSheet) zv = state.activeZoneView;
+    if (!zv) {
+      var list = $('moveSlotList');
+      if (list) list.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">載入 ' + esc(sheetName) + '…</div>';
+      try {
+        zv = await gas('getWarehouseZoneView', sheetName);
+        cacheSet('zone_' + sheetName, zv);
+      } catch(e) {
+        if (list) list.innerHTML = '<div style="color:#ff8f8f;font-size:12px;padding:8px">載入失敗：' + esc(e.message || '') + '</div>';
+        return;
+      }
+    }
+    state.moveDestZoneView = zv;
+    _renderMoveSlotList();
+  }
+
+  function closeMoveSlotPicker() {
+    $('moveSlotOverlay').classList.add('hidden');
+  }
+
+  function selectMoveSlot(slotId) {
+    var list = $('moveSlotList');
+    if (list) list.querySelectorAll('.move-slot-chip').forEach(function(b) {
+      b.classList.toggle('selected', b.dataset.slotid === slotId);
+    });
+    state.moveDestSlot = slotId;
+    var zv = state.moveDestZoneView;
+    var slot = (zv && zv.slots) ? zv.slots.find(function(s){ return s.slotId === slotId; }) : null;
+    var maxD = slot ? slot.maxDepth : (zv ? zv.maxDepth : 5);
+    var dp = $('moveDepthPicker');
+    if (!dp) return;
+    dp.innerHTML = '<span style="font-size:12px;color:var(--muted);font-weight:700;width:100%">選擇目標排：</span>' +
+      Array.from({length: Math.max(maxD, 5)}, function(_, i) {
+        var d = i + 1;
+        return '<button class="move-depth-chip" data-depth="' + d + '" onclick="selectMoveDepth(' + d + ')">' + depthLabel(d) + '</button>';
+      }).join('');
+    dp.classList.remove('hidden');
+  }
+
+  function selectMoveDepth(depth) {
+    var dp = $('moveDepthPicker');
+    if (dp) dp.querySelectorAll('.move-depth-chip').forEach(function(b) {
+      b.classList.toggle('selected', Number(b.dataset.depth) === depth);
+    });
+    state.moveDestDepth = depth;
+    closeMoveSlotPicker();
+    var zv = state.moveDestZoneView;
+    var destSlotObj = zv && zv.slots ? zv.slots.find(function(s){ return s.slotId === state.moveDestSlot; }) : null;
+    var existingCount = 0;
+    if (destSlotObj) {
+      var dd = (destSlotObj.depths || []).find(function(d){ return d.depth === depth; });
+      existingCount = dd ? (dd.pallets || []).length : 0;
+    }
+    openMoveConfirm(state.moveDestSlot, depth, existingCount + 1);
+  }
+
+  // 確認移動 overlay
+  function openMoveConfirm(destSlot, destDepth, destLevel) {
+    state.movePending = { destSlot: destSlot, destDepth: destDepth, destLevel: destLevel };
+    var src = state.movingRow;
+    if (!src) return;
+    var smSrc = (src.Sheet || '').match(/^([A-C])-([A-H])區$/);
+    var srcPrefix = smSrc ? (smSrc[1] + smSrc[2]) : src.Sheet;
+    var destSheetName = state.moveDestSheet || state.activeSheet;
+    var smDst = (destSheetName || '').match(/^([A-C])-([A-H])區$/);
+    var dstPrefix = smDst ? (smDst[1] + smDst[2]) : destSheetName;
+    var fromStr = srcPrefix + '區 ' + src.Slot + '列 ' + depthLabel(src.Depth) + ' 第' + (Number(src.Level) || 1) + '層';
+    var toStr   = dstPrefix + '區 ' + destSlot + '列 ' + depthLabel(destDepth) + ' 第' + destLevel + '層';
+    var body = $('moveConfirmBody');
+    if (body) {
+      body.innerHTML =
+        '<div class="move-from">來源：' + esc(fromStr) + '</div>' +
+        '<div class="move-arrow">↓</div>' +
+        '<div class="move-to">目標：' + esc(toStr) + '</div>';
+    }
+    $('moveConfirmOverlay').classList.remove('hidden');
+  }
+
+  function closeMoveConfirm() {
+    $('moveConfirmOverlay').classList.add('hidden');
+    state.movePending = null;
+    // 重置按鈕狀態
+    var btn = $('moveConfirmBtn');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '確認移動';
+      btn.classList.remove('btn-loading', 'btn-retry');
+    }
+    var errMsg = document.querySelector('.move-err-msg');
+    if (errMsg) errMsg.remove();
+  }
+
+  async function executeMove() {
+    if (state.saving)      { return; }
+    if (!state.movePending){ return; }
+    if (!state.movingRow)  { return; }
+    // 防護：目標排次必須 ≥ 1，destSlot 不可空白
+    if (!state.movePending.destSlot || Number(state.movePending.destDepth) < 1) {
+      setStatus('⚠️ 目標位置無效（排次=' + state.movePending.destDepth + '），請重新選擇', 'err');
+      closeMoveConfirm();
+      return;
+    }
+
+    // ── 按鈕切換成 loading 狀態，overlay 維持開啟 ──
+    var btn = $('moveConfirmBtn');
+    var cancelBtn = btn && btn.parentNode && btn.parentNode.querySelector('.ghost-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '寫入中…'; btn.classList.add('btn-loading'); }
+    if (cancelBtn) cancelBtn.disabled = true;
+
+    var p = state.movePending;
+    var src = state.movingRow;
+    state.saving = true;
+    try {
+      var isGroupMove = state.movingGroupKeys.length > 1;
+      var destSheet = state.moveDestSheet || state.activeSheet;
+      var operator = getOperator();
+      var result = await gas(isGroupMove ? 'movePalletGroup' : 'movePallet',
+        isGroupMove ? {
+          groupKeys:   state.movingGroupKeys,
+          sourceSheet: src.Sheet,
+          destSheet:   destSheet,
+          destSlot:    p.destSlot,
+          destDepth:   p.destDepth,
+          destLevel:   p.destLevel,
+          operator:    operator
+        } : {
+          palletKey:   state.movingKey,
+          sourceSheet: src.Sheet,
+          destSheet:   destSheet,
+          destSlot:    p.destSlot,
+          destDepth:   p.destDepth,
+          destLevel:   p.destLevel,
+          operator:    operator
+        });
+
+      // ── 成功：先清狀態再 render，只 render 一次，避免舊畫面閃現 ──
+      markWriteTime_(src.Sheet);
+      markWriteTime_(state.activeSheet);
+      // 1. 關 overlay
+      $('moveConfirmOverlay').classList.add('hidden');
+      state.movePending = null;
+      // 2. 重置按鈕（以備下次使用）
+      if (btn) { btn.disabled = false; btn.textContent = '確認移動'; btn.classList.remove('btn-loading', 'btn-retry'); }
+      // 3. 清移動模式（不呼叫 renderDetailPanel）
+      state.movingKey   = '';
+      state.movingRow   = null;
+      state.movingGroupId   = '';
+      state.movingGroupKeys = [];
+      state.moveDestSlot  = '';
+      state.moveDestDepth = 0;
+      _destroyGhost();
+      closeMoveSlotPicker();
+      // 4. 更新 zone view + history，render 一次
+      if (result.history) applyHistory_(result.history);
+      // 快取兩邊的 zone view
+      if (result.sourceZoneView) {
+        cacheSet('zone_' + result.sourceZoneView.sheet, result.sourceZoneView);
+      }
+      if (result.destZoneView) {
+        cacheSet('zone_' + result.destZoneView.sheet, result.destZoneView);
+      }
+      var zv = result.zoneView || result.sourceZoneView;
+      if (zv) {
+        cacheSet('zone_' + zv.sheet, zv);
+        state.activeZoneView = zv;
+      }
+      // 焦點停在來源格子／排，讓使用者確認板子確實移走了
+      // （不跳到目的地，使用者可自行點 undo 或用搜尋找到目的地）
+      state.activeSlot  = src.Slot  ? String(src.Slot)  : state.activeSlot;
+      state.activeDepth = src.Depth ? Number(src.Depth) : state.activeDepth;
+      var _scrollX = window.scrollX, _scrollY = window.scrollY;
+      renderOverviewTable();
+      renderDetailPanel();
+      window.scrollTo(_scrollX, _scrollY);
+      setStatus('移動完成 ✓ → ' + (state.moveDestSheet !== src.Sheet ? esc(state.moveDestSheet) + ' ' : '') + esc(p.destSlot) + '列 ' + depthLabel(p.destDepth), 'ok');
+
+    } catch (err) {
+      // 失敗：恢復按鈕，讓使用者可以重試或取消
+      if (btn) { btn.disabled = false; btn.textContent = '重試'; btn.classList.remove('btn-loading'); btn.classList.add('btn-retry'); }
+      if (cancelBtn) cancelBtn.disabled = false;
+      var msg = err && err.message ? err.message : String(err);
+      var body = $('moveConfirmBody');
+      if (body) body.insertAdjacentHTML('beforeend', '<div class="move-err-msg">⚠️ ' + esc(msg) + '</div>');
+      setStatus('移動失敗：' + msg, 'err');
+    } finally {
+      state.saving = false;
+    }
+  }
+  // ===== 還原 / 重做 =====
+  var _history = { canUndo: false, canRedo: false, undoLabel: '', redoLabel: '' };
+
+  function applyHistory_(h) {
+    if (!h) return;
+    _history = h;
+    renderUndoRedo();
+  }
+
+  var _historyBusy = ''; // '', 'undo', 'redo' — 哪個按鈕正在執行中
+
+  function _undoRedoBtnHtml_(kind, cls) {
+    var u = _history;
+    var isUndo = (kind === 'undo');
+    var enabled = isUndo ? u.canUndo : u.canRedo;
+    var label = isUndo ? '還原' : '重做';
+    var count = isUndo ? (u.undoCount || 0) : (u.redoCount || 0);
+    var title = isUndo ? u.undoLabel : u.redoLabel;
+    var busy = (_historyBusy === kind);
+    var icon = busy ? '<span class="btn-icon">↻</span> ' : '';
+    var badge = (enabled && count > 0) ? '<span class="step-count">' + count + '</span>' : '';
+    return '<button class="' + cls + (!enabled ? ' disabled' : '') + (busy ? ' busy' : '') +
+      '" onclick="do' + (isUndo ? 'Undo' : 'Redo') + '()" title="' + esc(title) + '" ' +
+      (!enabled || busy ? 'disabled' : '') + '>' + icon + label + badge + '</button>';
+  }
+
+  function renderUndoRedo() {
+    var wrap = $('undoRedoWrap');
+    if (!wrap) return;
+    wrap.innerHTML = _undoRedoBtnHtml_('undo', 'undo-btn') + _undoRedoBtnHtml_('redo', 'redo-btn');
+  }
+
+  async function doUndo() {
+    if (!_history.canUndo || state.saving) return;
+    state.saving = true;
+    _historyBusy = 'undo';
+    renderUndoRedo();
+    renderDetailPanel();
+    setStatus('還原中…', '');
+    try {
+      var result = await gas('undoLastMove');
+      applyMoveResult_(result);
+      setStatus('已還原 ✓', 'ok');
+    } catch (e) {
+      var msg = (e.message || String(e));
+      // 找不到棧板：提示使用者手動確認，而不是讓畫面卡住
+      if (msg.indexOf('pallet not found') >= 0 || msg.indexOf('please refresh') >= 0) {
+        setStatus('⚠️ 還原失敗：棧板已被移動，請重新整理後手動確認位置', 'err');
+        // 強制重新載入目前區域，讓畫面反映最新狀態
+        _bgRefreshZone(state.activeSheet, false);
+      } else {
+        setStatus('還原失敗：' + msg, 'err');
+      }
+      // 同步 history 狀態（後端已 pop 出來，要更新按鈕）
+      gas('getMoveHistory').then(applyHistory_).catch(function(){});
+    } finally {
+      state.saving = false;
+      _historyBusy = '';
+      renderUndoRedo();
+      renderDetailPanel();
+    }
+  }
+
+  async function doRedo() {
+    if (!_history.canRedo || state.saving) return;
+    state.saving = true;
+    _historyBusy = 'redo';
+    renderUndoRedo();
+    renderDetailPanel();
+    setStatus('重做中…', '');
+    try {
+      var result = await gas('redoLastMove');
+      applyMoveResult_(result);
+      setStatus('已重做 ✓', 'ok');
+    } catch (e) {
+      var msg = (e.message || String(e));
+      if (msg.indexOf('pallet not found') >= 0 || msg.indexOf('please refresh') >= 0) {
+        setStatus('⚠️ 重做失敗：棧板位置已變動，請重新整理後手動確認', 'err');
+        _bgRefreshZone(state.activeSheet, false);
+      } else {
+        setStatus('重做失敗：' + msg, 'err');
+      }
+      gas('getMoveHistory').then(applyHistory_).catch(function(){});
+    } finally {
+      state.saving = false;
+      _historyBusy = '';
+      renderUndoRedo();
+      renderDetailPanel();
+    }
+  }
+
+  // 抽出 executeMove 的成功後處理，供 undo/redo 共用
+  function applyMoveResult_(result) {
+    if (result && result.history) applyHistory_(result.history);
+    // 標記寫入時間，防止同時進行的背景刷新覆蓋結果
+    if (result && result.sourceZoneView) {
+      markWriteTime_(result.sourceZoneView.sheet);
+      if (result.sourceZoneView.sheet !== state.activeSheet) {
+        cacheSet('zone_' + result.sourceZoneView.sheet, result.sourceZoneView);
+      }
+    }
+    var zv = result ? (result.destZoneView || result.zoneView) : null;
+    if (zv) {
+      markWriteTime_(zv.sheet);
+      cacheSet('zone_' + zv.sheet, zv);
+      state.activeZoneView = zv;
+    }
+    // undo/redo 後跳回棧板所在位置
+    if (result && result.navigateTo && result.navigateTo.sheet === state.activeSheet) {
+      state.activeSlot  = result.navigateTo.slot;
+      state.activeDepth = result.navigateTo.depth;
+    }
+    renderOverviewTable();
+    renderDetailPanel();
+  }
+  // ===== /還原 / 重做 =====
+
+  // ===== /移動模式 =====
+
+  function renderWarehouseMap() {
+    try {
+      var wrap = document.getElementById('warehouseMapWrap');
+      if (!wrap) return;
+      var sheet = state.activeSheet || '';
+      var m = sheet.match(/^([A-C])-([A-H])區$/);
+      if (!m) { wrap.innerHTML = ''; return; }
+      var wh = m[1], activeZone = m[2];
+      var layout = ZONE_LAYOUTS[wh];
+      if (!layout) { wrap.innerHTML = ''; return; }
+      var slotNum = parseInt(state.activeSlot, 10) || 0;
+      var vw = layout.vw, vh = layout.vh;
+      var zones = layout.zones, extras = layout.extras || [];
+      var p = [];
+      p.push('<rect width="' + vw + '" height="' + vh + '" fill="#0d1929" rx="5"/>');
+      var i, e, lx, ly, rot, zid, z, isActive, fill, stroke, sw, fs, fc, pos, tx, anc;
+      for (i = 0; i < extras.length; i++) {
+        e = extras[i];
+        p.push('<rect x="' + e.x + '" y="' + e.y + '" width="' + e.w + '" height="' + e.h + '" rx="2" fill="#0a1520"/>');
+        if (e.label) {
+          lx = e.x + e.w/2; ly = e.y + e.h/2;
+          rot = e.rot ? ' transform="rotate(-90 ' + lx + ' ' + ly + ')"' : '';
+          p.push('<text x="' + lx + '" y="' + (ly+4) + '" text-anchor="middle" font-size="7" fill="#4a6080" font-weight="800" font-family="system-ui"' + rot + '>' + e.label + '</text>');
+        }
+      }
+      var zoneKeys = Object.keys(zones);
+      for (i = 0; i < zoneKeys.length; i++) {
+        zid = zoneKeys[i]; z = zones[zid];
+        isActive = zid === activeZone;
+        fill   = isActive ? 'rgba(73,209,125,0.22)' : 'rgba(255,255,255,0.07)';
+        stroke = isActive ? '#49d17d' : 'rgba(255,255,255,0.2)';
+        sw = isActive ? 2 : 1;
+        p.push('<rect x="' + z.x + '" y="' + z.y + '" width="' + z.w + '" height="' + z.h + '" rx="3" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + sw + '"/>');
+        lx = z.x + z.w/2; ly = z.y + z.h/2;
+        var shortSide = Math.min(z.w, z.h);
+        fs = shortSide < 20 ? 7 : shortSide < 30 ? 9 : 11;
+        fc = isActive ? '#6eeaa0' : '#6080a0';
+        if (z.h > z.w * 2.2) {
+          p.push('<text x="' + lx + '" y="' + (ly+4) + '" text-anchor="middle" font-size="' + fs + '" font-weight="900" fill="' + fc + '" font-family="system-ui" transform="rotate(-90 ' + lx + ' ' + ly + ')">' + zid + '</text>');
+        } else {
+          p.push('<text x="' + lx + '" y="' + (ly+4) + '" text-anchor="middle" font-size="' + fs + '" font-weight="900" fill="' + fc + '" font-family="system-ui">' + zid + '</text>');
+          if (isActive && shortSide >= 24) {
+            p.push('<text x="' + lx + '" y="' + (ly+13) + '" text-anchor="middle" font-size="6" font-weight="700" fill="rgba(110,234,160,0.7)" font-family="system-ui">' + (DIR_ARROW[z.dir] || '') + '</text>');
+          }
+        }
+      }
+      if (slotNum > 0 && zones[activeZone]) {
+        pos = getMarkerXY(zones[activeZone], slotNum);
+        p.push('<circle cx="' + pos.mx + '" cy="' + pos.my + '" r="10" fill="rgba(255,60,60,0.22)"/>');
+        p.push('<circle cx="' + pos.mx + '" cy="' + pos.my + '" r="6" fill="rgba(255,60,60,0.65)"/>');
+        p.push('<circle cx="' + pos.mx + '" cy="' + pos.my + '" r="3.5" fill="#ff3333"/>');
+        tx = pos.mx > vw/2 ? pos.mx - 11 : pos.mx + 11;
+        anc = pos.mx > vw/2 ? 'end' : 'start';
+        p.push('<text x="' + tx + '" y="' + (pos.my+4) + '" text-anchor="' + anc + '" font-size="9" font-weight="900" fill="#ffaaaa" font-family="system-ui">' + slotNum + '</text>');
+      }
+      p.push('<text x="' + (vw-4) + '" y="' + (vh-4) + '" text-anchor="end" font-size="8" fill="#253545" font-weight="900" font-family="system-ui">' + wh + '</text>');
+      wrap.innerHTML = '<svg viewBox="0 0 ' + vw + ' ' + vh + '" width="100%" style="display:block" xmlns="http://www.w3.org/2000/svg">' + p.join('') + '</svg>';
+    } catch(e2) { /* fail silently, map is decorative */ }
+  }
+  const isMobile = () => window.matchMedia("(max-width: 720px)").matches;
+
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+
+  let _statusTimer = null;
+  function setStatus(msg, cls) {
+    const el = $("cacheInfo");
+    if (!el) return;
+    clearTimeout(_statusTimer);
+    el.textContent = msg;
+    el.className = 'cache-info ' + (cls || 'loading');
+    if (cls === 'ok') {
+      _statusTimer = setTimeout(() => { el.classList.add('settled'); }, 3000);
+    }
+  }
+
+  function cacheTime(key) {
+    try {
+      const raw = localStorage.getItem('wms_' + key);
+      if (!raw) return null;
+      const t = JSON.parse(raw).t;
+      if (!t) return null;
+      const date = new Date(t);
+      const hh = String(date.getHours()).padStart(2,'0');
+      const mm = String(date.getMinutes()).padStart(2,'0');
+      const mins = Math.round((Date.now() - t) / 60000);
+      const age = mins < 2 ? '剛剛' : mins < 60 ? mins + '分前' : Math.round(mins/60) + '小時前';
+      return hh + ':' + mm + ' (' + age + ')';
+    } catch (e) { return null; }
+  }
+
+  function fail(err) {
+    const msg = (err && (err.stack || err.message)) || String(err);
+    setStatus("載入失敗：\n" + msg, "bad");
+  }
+
+  function gas(method, ...args) {
+    return new Promise((resolve, reject) => {
+      if (typeof google === "undefined" || !google.script || !google.script.run) {
+        reject(new Error("google.script.run 不存在，請確認從 Apps Script /exec 開啟"));
+        return;
+      }
+      let done = false;
+      const timeoutMs = method === 'movePalletGroup' ? 90000 : method === 'movePallet' ? 60000 : method === "updateWarehousePallet" ? 30000 : 20000;
+      console.log('[gas calling]', method, JSON.stringify(args[0] || ''));
+      const timer = setTimeout(() => {
+        if (!done) {
+          done = true;
+          console.error('[gas TIMEOUT]', method, timeoutMs + 'ms');
+          reject(new Error(method + " timeout after " + Math.round(timeoutMs / 1000) + "s"));
+        }
+      }, timeoutMs);
+      try {
+        google.script.run
+          .withSuccessHandler(result => { console.log('[gas raw OK]', method); if (done) return; done = true; clearTimeout(timer); console.log('[gas OK]', method, result); resolve(result); })
+          .withFailureHandler(error => { console.error('[gas raw ERR]', method, error); if (done) return; done = true; clearTimeout(timer); console.error('[gas ERR]', method, error); reject(error); })[method](...args);
+        console.log('[gas queued]', method);
+      } catch(syncErr) {
+        done = true; clearTimeout(timer);
+        console.error('[gas SYNC-THROW]', method, syncErr);
+        reject(syncErr);
+      }
+    });
+  }
+
+  // 數量字色 → 狀態標籤 HTML（正常不顯示）
+  function qtyStatusHtml(fontColor) {
+    if (fontColor === 'RED')    return '<span class="qty-status reported">已回報</span>';
+    if (fontColor === 'GREEN')  return '<span class="qty-status pending">待重點</span>';
+    if (fontColor === 'YELLOW') return '<span class="qty-status nosys">無庫存</span>';
+    return '';
+  }
+
+  function paletteClass(row) {
+    const bg = String(row.BgColor || "WHITE").toLowerCase();
+    const font = String(row.FontColor || "BLACK").toLowerCase();
+    return [bg === "red" ? "red" : bg === "yellow" ? "yellow" : bg === "green" ? "green" : "white", font === "blue" ? "bluefont" : ""].join(" ").trim();
+  }
+
+  function rowText(row) {
+    return [row.SKU, row.Batch, row.HanhwaCode, row.Brand, row.Series, row.OriginalName, row.Sheet, row.Stack, row.Slot].join(" ").toLowerCase();
+  }
+
+  // ── 快取層 ──
+  const CACHE_FRESH_MS  =  5 * 60 * 1000;   //  5 分鐘：完全不需要刷新
+  const CACHE_STALE_MS  = 30 * 60 * 1000;   // 30 分鐘：背景刷新
+  // 超過 30 分或無快取：前景載入
+
+  function cacheGet(key) {
+    try {
+      const raw = localStorage.getItem('wms_' + key);
+      if (!raw) return null;
+      return JSON.parse(raw).v;
+    } catch (e) { return null; }
+  }
+  function cacheSet(key, val) {
+    var data = JSON.stringify({ t: Date.now(), v: val });
+    try {
+      localStorage.setItem('wms_' + key, data);
+    } catch (e) {
+      // QuotaExceededError：清除最舊的 zone 快取後重試
+      if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+        try {
+          var entries = [];
+          for (var k in localStorage) {
+            if (!String(k).startsWith('wms_zone_')) continue;
+            try { entries.push({ k: k, t: JSON.parse(localStorage.getItem(k)).t || 0 }); } catch(e2) {}
+          }
+          entries.sort(function(a, b) { return a.t - b.t; }); // 最舊排前面
+          var toDel = Math.max(1, Math.ceil(entries.length / 2));
+          for (var i = 0; i < toDel; i++) localStorage.removeItem(entries[i].k);
+          localStorage.setItem('wms_' + key, data); // 重試
+        } catch(e3) { console.warn('[cacheSet] quota retry failed:', key, e3); }
+      } else {
+        console.warn('[cacheSet] failed:', key, e);
+      }
+    }
+  }
+  function cacheAgeMs(key) {
+    try {
+      const raw = localStorage.getItem('wms_' + key);
+      if (!raw) return Infinity;
+      const t = JSON.parse(raw).t;
+      return t ? Date.now() - t : Infinity;
+    } catch(e) { return Infinity; }
+  }
+  function cacheAge(key) {
+    try {
+      const raw = localStorage.getItem('wms_' + key);
+      if (!raw) return null;
+      const t = JSON.parse(raw).t;
+      if (!t) return null;
+      const mins = Math.round((Date.now() - t) / 60000);
+      return mins < 60 ? mins + ' 分前' : Math.round(mins / 60) + ' 小時前';
+    } catch (e) { return null; }
+  }
+  function cacheClear() {
+    Object.keys(localStorage).filter(k => k.startsWith('wms_')).forEach(k => localStorage.removeItem(k));
+  }
+
+  // ── 背景靜默刷新單一區域 ──
+  // isSilent=true 時不更新 status bar（預熱用）
+  var _bgRefreshingZones = {};
+  var _lastWriteTime = {};   // sheetName → timestamp，用來偵測背景刷新是否已過時
+
+  // 任何寫入操作（move/update）完成後呼叫，標記該 sheet 的寫入時間
+  function markWriteTime_(sheetName) {
+    _lastWriteTime[sheetName] = Date.now();
+  }
+
+  async function _bgRefreshZone(sheetName, isSilent) {
+    if (_bgRefreshingZones[sheetName]) return;   // 避免重複
+    _bgRefreshingZones[sheetName] = true;
+    var startTime = Date.now();   // 記錄請求發出時刻
+    try {
+      if (!isSilent && state.activeSheet === sheetName) setStatus('同步中…', 'loading');
+      const fresh = await gas('getWarehouseZoneView', sheetName);
+      // ★ 防止 race condition：若請求發出後有過寫入，丟棄這個過時的結果
+      if ((_lastWriteTime[sheetName] || 0) > startTime) {
+        console.log('[bgRefresh] discarded stale result for', sheetName);
+        return;
+      }
+      cacheSet('zone_' + sheetName, fresh);
+      if (state.activeSheet === sheetName) {
+        // 若使用者正在這個區域，刷新畫面（不打斷編輯/移動）
+        state.activeZoneView = fresh;
+        if (!state.editingRow && !state.movingKey) {
+          renderOverviewTable();
+          // 只在沒有彈窗時才重繪 detail，避免閃爍
+          if (!$('moveConfirmOverlay') || $('moveConfirmOverlay').classList.contains('hidden')) {
+            renderDetailPanel();
+          }
+        }
+        if (!isSilent) setStatus('已同步 ' + (cacheTime('zone_' + sheetName) || ''), 'ok');
+      }
+      renderZoneChips();   // 刷新同步指示點
+    } catch(e) {
+      console.warn('[bgRefresh]', sheetName, e);
+      if (!isSilent && state.activeSheet === sheetName) setStatus('背景同步失敗', 'bad');
+    } finally {
+      _bgRefreshingZones[sheetName] = false;
+    }
+  }
+
+  // ── 預熱所有區域（啟動後背景依序載入）──
+  var _preloadDone = false;
+  async function _preloadAllZones() {
+    if (_preloadDone) return;
+    _preloadDone = true;
+    const sheets = state.sheets || [];
+    for (const sheet of sheets) {
+      if (sheet.name === state.activeSheet) continue;    // 主區已載入
+      const ageMs = cacheAgeMs('zone_' + sheet.name);
+      if (ageMs < CACHE_STALE_MS) continue;              // 快取還新鮮，不需刷
+      await _bgRefreshZone(sheet.name, true);            // 靜默預熱
+      await new Promise(r => setTimeout(r, 600));        // 間隔 0.6s 避免打擠
+    }
+    console.log('[preload] all zones warmed');
+  }
+
+  async function boot() {
+    try {
+      initOperator();
+      const d = new Date();
+      const ver = 'V' + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+      if ($("ver")) $("ver").textContent = ver;
+
+      let sheets = cacheGet('sheets');
+      if (sheets) {
+        state.sheets = sheets;
+        setStatus("快取中…");
+      } else {
+        setStatus("讀取區域清單...");
+        sheets = await gas("getInventorySheetList");
+        state.sheets = sheets;
+        cacheSet('sheets', sheets);
+      }
+
+      renderZoneChips();
+      const lastZone = localStorage.getItem('wms_last_zone');
+      const preferred = (lastZone && state.sheets.find(s => s.name === lastZone))
+        || state.sheets.find(s => s.name === "B-G區") || state.sheets[0];
+      if (!preferred) throw new Error("沒有可用分區");
+      await loadZone(preferred.name);
+      preloadSearchIndex();
+      // 讀取還原/重做狀態（背景，失敗不影響主流程）
+      gas('getMoveHistory').then(applyHistory_).catch(() => {});
+      // 背景預熱其他區域（延遲 3 秒，讓主區先穩定）
+      setTimeout(_preloadAllZones, 3000);
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  async function preloadSearchIndex() {
+    try {
+      let rows = cacheGet('search');
+      const ageMs = cacheAgeMs('search');
+      if (!rows || ageMs >= CACHE_STALE_MS) {
+        const raw = await gas("getSearchIndex");
+        rows = JSON.parse(raw);
+        if (Array.isArray(rows)) cacheSet('search', rows);
+      }
+      if (Array.isArray(rows)) {
+        state.searchRows = rows;
+        state.searchReady = true;
+        renderSearch();
+      }
+    } catch (err) {
+      console.warn("search preload failed", err);
+    }
+  }
+
+  async function loadZone(sheetName, preferredSlot, preferredDepth, preferredPalletKey) {
+    state.activeSheet = sheetName;
+    localStorage.setItem('wms_last_zone', sheetName);
+    renderZoneChips();
+
+    const ageMs = cacheAgeMs('zone_' + sheetName);
+    let zoneView = cacheGet('zone_' + sheetName);
+
+    if (zoneView) {
+      // ── 有快取：立刻顯示，按新鮮度決定是否背景刷新 ──
+      state.activeZoneView = zoneView;
+      state.activeSlot = preferredSlot || "";
+      state.activeDepth = Number(preferredDepth || 0);
+      state.activePalletKey = preferredPalletKey || "";
+      state.activeItemKey = preferredPalletKey || "";
+      renderOverviewTable();
+      renderDetailPanel();
+      renderSearch();
+
+      if (ageMs < CACHE_FRESH_MS) {
+        setStatus('快取 ' + (cacheTime('zone_' + sheetName) || ''), 'ok');
+      } else {
+        // 背景靜默刷新（不卡 UI）
+        _bgRefreshZone(sheetName, false);
+      }
+      return;   // 立刻返回，畫面已顯示
+    }
+
+    // ── 無快取：前景載入 ──
+    setStatus("載入 " + sheetName + "...");
+    zoneView = await gas("getWarehouseZoneView", sheetName);
+    cacheSet('zone_' + sheetName, zoneView);
+    const t = cacheTime('zone_' + sheetName);
+    setStatus("已更新 " + (t || ''), "ok");
+
+    state.activeZoneView = zoneView;
+    state.activeSlot = preferredSlot || "";
+    state.activeDepth = Number(preferredDepth || 0);
+    state.activePalletKey = preferredPalletKey || "";
+    state.activeItemKey = preferredPalletKey || "";
+    renderOverviewTable();
+    renderDetailPanel();
+    renderSearch();
+  }
+
+  async function forceRefresh() {
+    cacheClear();
+    state.sheets = [];
+    state.activeZoneView = null;
+    state.searchRows = [];
+    state.searchReady = false;
+    setStatus("清除快取，重新讀取...");
+    await boot();
+  }
+
+  function renderZoneChips() {
+    const zoneHits = searchZoneSet();
+    const zoneCompany = searchZoneCompanyMap();
+    const q = currentSearchQuery();
+    const sorted = hasSearchQuery(q)
+      ? [...state.sheets].sort((a, b) => (zoneHits.has(a.name) ? 0 : 1) - (zoneHits.has(b.name) ? 0 : 1))
+      : state.sheets;
+    $("zoneChips").innerHTML = sorted.map(sheet => {
+      const active = sheet.name === state.activeSheet ? "active" : "";
+      const isHit = hasSearchQuery(q) && zoneHits.has(sheet.name);
+      const hit = isHit ? 'hit pulse' : '';
+      const cc = isHit ? companyClass(zoneCompany[sheet.name]) : '';
+      // 同步狀態指示點
+      const isSyncing = !!_bgRefreshingZones[sheet.name];
+      const ageMs2 = cacheAgeMs('zone_' + sheet.name);
+      const hasFreshCache = ageMs2 < CACHE_STALE_MS;
+      const syncDot = isSyncing
+        ? '<i class="zone-sync-dot syncing" title="同步中…"></i>'
+        : (!hasFreshCache ? '<i class="zone-sync-dot stale" title="快取已逾期"></i>' : '');
+      return '<button class="zone-chip ' + active + ' ' + hit + ' ' + cc + '" data-sheet="' + esc(sheet.name) + '" onclick="loadZone(' + JSON.stringify(sheet.name) + '); return false;">' + esc(sheet.name) + syncDot + '<span>' + esc(sheet.count) + '</span></button>';
+    }).join("");
+  }
+
+  function slotById(slotId) {
+    const zoneView = state.activeZoneView || {};
+    return (zoneView.slots || []).find(slot => slot.slotId === slotId) || null;
+  }
+
+  function depthDataOf(slot, depth) {
+    return (slot && slot.depths || []).find(d => Number(d.depth) === Number(depth)) || null;
+  }
+
+  function sortedPallets(depthData) {
+    return ((depthData && depthData.pallets) || []).slice().sort((a, b) => Number(a.Level || 0) - Number(b.Level || 0));
+  }
+
+  function currentSearchQuery() {
+    return {
+      sku: ($("searchSku") && $("searchSku").value || "").trim().toLowerCase(),
+      batch: ($("searchBatch") && $("searchBatch").value || "").trim().toLowerCase()
+    };
+  }
+
+  function hasSearchQuery(q) {
+    return !!((q && q.sku) || (q && q.batch));
+  }
+
+  function rowMatchesQuery(row, q) {
+    if (!q) return false;
+    const skuOk = !q.sku || rowText(row).includes(q.sku);
+    const batchOk = !q.batch || String(row.Batch || '').toLowerCase().includes(q.batch);
+    return skuOk && batchOk;
+  }
+
+  function searchMatches() {
+    const q = currentSearchQuery();
+    if (!hasSearchQuery(q) || !state.searchReady) return [];
+    return state.searchRows.filter(row => rowMatchesQuery(row, q));
+  }
+
+  function searchZoneSet() {
+    return new Set(searchMatches().map(row => row.Sheet));
+  }
+
+  function searchSlotDepthSet() {
+    return new Set(searchMatches().map(row => [row.Sheet, row.Slot, row.Depth].join('||')));
+  }
+
+  function currentDepthPallets() {
+    const slot = slotById(state.activeSlot);
+    const depthData = slot ? depthDataOf(slot, state.activeDepth) : null;
+    return sortedPallets(depthData);
+  }
+
+  function detailValue(v) {
+    if (v === null || v === undefined || v === '') return '-';
+    return v;
+  }
+
+  function companyClass(company) {
+    if (!company) return '';
+    if (company.includes('安帝嘉')) return 'co-antiga';
+    if (company.includes('喜悅納')) return 'co-xina';
+    if (company.includes('高雅瓷')) return 'co-koya';
+    if (company.includes('漢樺')) return 'co-hanhwa';
+    return '';
+  }
+
+  function searchZoneCompanyMap() {
+    const q = currentSearchQuery();
+    if (!hasSearchQuery(q) || !state.searchReady) return {};
+    const map = {};
+    state.searchRows.filter(row => rowMatchesQuery(row, q)).forEach(row => {
+      const sheet = row.Sheet;
+      if (map[sheet]) return;
+      const branch = (row.Branches || []).find(b => b.Company && b.Company !== '未知分公司');
+      if (branch) map[sheet] = branch.Company;
+    });
+    return map;
+  }
+
+  function locationCode(row) {
+    const area = (row.Sheet || '').replace(/-/g, '_');
+    const slot = row.Slot || '-';
+    const depth = row.Depth || 0;
+    const level = row.Level || '-';
+    return area + '_' + slot + '列_' + depth + '排_' + level + '層';
+  }
+
+  function driveThumbUrl(url) {
+    if (!url) return '';
+    const m = String(url).match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (!m) return '';
+    return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w400';
+  }
+
+  function toggleItemSpecs() {
+    const specs = $("itemSpecs");
+    const btn = $("itemDetailToggle");
+    if (!specs) return;
+    const nowHidden = specs.classList.toggle("hidden");
+    if (btn) btn.textContent = nowHidden ? "查看完整資訊 ▼" : "收起 ▲";
+  }
+
+  function zoomIn() {
+    state.zoomScale = Math.min(+(state.zoomScale + 0.2).toFixed(1), 3.0);
+    applyZoom();
+  }
+  function zoomOut() {
+    state.zoomScale = Math.max(+(state.zoomScale - 0.2).toFixed(1), 0.4);
+    applyZoom();
+  }
+  function applyZoom() {
+    const table = $("overviewTableWrap") && $("overviewTableWrap").querySelector('.overview-table');
+    if (table) table.style.zoom = state.zoomScale;
+  }
+
+  function scrollActiveCellIntoView() {
+    const wrap = $("overviewTableWrap");
+    if (!wrap) return;
+    const active = wrap.querySelector('.cell-btn.active');
+    if (!active) return;
+    active.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+  }
+
+  function scrollActiveItemIntoView() {
+    const active = $("cellItems") ? $("cellItems").querySelector('.item-chip.active') : null;
+    if (!active) return;
+    active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }
+
+  function focusSearchTarget() {
+    if (state._suppressFocus) return;
+    setTimeout(() => {
+      if (state._suppressFocus) return;
+      scrollActiveCellIntoView();
+      scrollActiveItemIntoView();
+      if (isMobile() && state.activeSlot && state.activeDepth) {
+        const panel = $("detailPanel");
+        if (panel) panel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }, 80);
+  }
+
+
+  function renderOverviewTable() {
+    const zoneView = state.activeZoneView;
+    if (!zoneView || !zoneView.slots || !zoneView.slots.length) {
+      $("overviewTableWrap").innerHTML = '<div class="empty">這個區域沒有可用格位資料</div>';
+      return;
+    }
+
+    if ($("overviewMeta")) $("overviewMeta").textContent = '';
+
+    const header = zoneView.slots.map(slot => {
+      const isActive = slot.slotId === state.activeSlot;
+      const dot = isActive ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f04242;margin-left:5px;vertical-align:middle;box-shadow:0 0 6px rgba(240,66,66,.7)"></span>' : '';
+      return '<th' + (isActive ? ' style="background:#1a2f4a;"' : '') + '><div class="slot-head"><strong>' + esc(slot.slotId) + dot + '</strong><small>' + esc(slot.palletCount) + ' 板 / 高 ' + esc(slot.maxLevel) + '</small></div></th>';
+    }).join('');
+
+    const rows = [];
+    for (let depth = 1; depth <= zoneView.maxDepth; depth += 1) {
+      const cells = zoneView.slots.map(slot => {
+        const depthData = depthDataOf(slot, depth);
+        if (!depthData || !depthData.pallets || !depthData.pallets.length) {
+          return '<td class="overview-cell"><div class="cell-empty"></div></td>';
+        }
+        const pallets = sortedPallets(depthData);
+        const query = currentSearchQuery();
+        const slotDepthHits = searchSlotDepthSet();
+        const lineHtml = pallets.map((row, idx) => {
+          const hit = rowMatchesQuery(row, query) ? 'hit' : '';
+          return '<div class="cell-line ' + hit + '"><div class="cell-main"><div class="cell-sku">' + esc(row.SKU || '-') + '</div></div><div class="cell-batch-badge">' + esc(row.Batch || '-') + '</div></div>';
+        }).join('');
+        const hitKey = [state.activeSheet, slot.slotId, depth].join('||');
+        const anyHit = hasSearchQuery(query) && slotDepthHits.has(hitKey) ? 'hit pulse' : '';
+        const active = state.activeSlot === slot.slotId && Number(state.activeDepth) === Number(depth) ? 'active' : '';
+        const area = (state.activeSheet || '').replace(/-/g, '_');
+        const lv = v => '<span class="cf-val">' + esc(String(v)) + '</span>';
+        const ll = l => '<span class="cf-lbl">' + l + '</span>';
+        const locFoot = lv(area) + ll('_') + lv(slot.slotId) + ll('列_') + lv(depth) + ll('排');
+        return '<td class="overview-cell"><button class="cell-btn ' + active + ' ' + anyHit + '" data-slot="' + esc(slot.slotId) + '" data-depth="' + esc(depth) + '" onclick="selectCell(' + JSON.stringify(slot.slotId) + ',' + depth + '); return false;"><div class="cell-lines">' + lineHtml + '</div><div class="cell-foot"><span class="cf-loc">' + locFoot + '</span><span>' + esc(pallets.length) + '板</span></div></button></td>';
+      }).join('');
+      rows.push('<tr>' + cells + '</tr>');
+    }
+
+    $("overviewTableWrap").innerHTML = '<table class="overview-table"><thead><tr>' + header + '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
+  }
+
+  function depthLabel(depth) {
+    const map = ['', '第一排', '第二排', '第三排', '第四排', '第五排', '第六排', '第七排', '第八排', '第九排', '第十排'];
+    return map[depth] || ('第' + depth + '排');
+  }
+
+  function selectCell(slotId, depth) {
+    state.activeSlot = slotId;
+    state.activeDepth = Number(depth || 0);
+    state.activePalletKey = '';
+    state.activeItemKey = '';
+    renderOverviewTable();
+    renderDetailPanel();
+    if (isMobile()) {
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  function closeDetail() {
+    state.activeSlot = '';
+    state.activeDepth = 0;
+    state.activePalletKey = '';
+    state.activeItemKey = '';
+    $("detailPanel").classList.add("hidden");
+    $("detailBackdrop").classList.add("hidden");
+    document.body.style.overflow = '';
+    renderOverviewTable();
+  }
+
+  // 將有序 pallets 依 PalletGroupId 分組（同色塊 = 同物理棧板）
+  function buildPalletGroups_(pallets) {
+    var groups = [];
+    var lastGid = null;
+    pallets.forEach(function(row) {
+      var gid = row.PalletGroupId || row.PalletKey;
+      if (gid !== lastGid) { groups.push({ groupId: gid, pallets: [] }); lastGid = gid; }
+      groups[groups.length - 1].pallets.push(row);
+    });
+    return groups;
+  }
+
+  function renderDetailPanel() {
+    const panel = $("detailPanel");
+    const backdrop = $("detailBackdrop");
+    const zoneView = state.activeZoneView;
+    const slot = slotById(state.activeSlot);
+
+    if (!zoneView || !slot || !state.activeDepth) {
+      $("slotTitle").textContent = '剖面圖';
+      $("slotMeta").textContent = '先從俯視圖點一個格子';
+      $("crossSection").innerHTML = '<div class="empty">上方俯視圖點格子後，這裡才會顯示由下到上的堆疊剖面。</div>';
+      if (isMobile()) {
+        panel.classList.add('hidden');
+        backdrop.classList.add('hidden');
+      } else {
+        panel.classList.add('hidden');
+      }
+      return;
+    }
+
+    panel.classList.remove('hidden');
+    if (isMobile()) backdrop.classList.remove('hidden'); else backdrop.classList.add('hidden');
+
+    $("slotTitle").textContent = '';
+    var _lv = function(v) { return '<span class="loc-val">' + esc(String(v)) + '</span>'; };
+    var _ll = function(l) { return '<span class="loc-label">' + l + '</span>'; };
+    var _sm = (state.activeSheet || '').match(/^([A-C])-([A-H])區$/);
+    var _locHtml;
+    if (_sm) {
+      _locHtml = _lv(_sm[1]) + _ll('倉') + _lv(_sm[2]) + _ll('區') + _lv(slot.slotId) + _ll('列') + _lv(state.activeDepth) + _ll('排');
+    } else {
+      var _area = (state.activeSheet || '').replace(/-/g, '_').replace(/區$/, '');
+      _locHtml = _lv(_area) + _ll('區') + _lv(slot.slotId) + _ll('列') + _lv(state.activeDepth) + _ll('排');
+    }
+    $("slotMeta").innerHTML = '<span class="loc-code">' + _locHtml + '</span>';
+    renderWarehouseMap();
+
+    renderCellItems();
+    renderItemDetail();
+
+    const depthMap = {};
+    (slot.depths || []).forEach(depth => { depthMap[depth.depth] = depth; });
+    const columns = [];
+    const isMoveMode = !!state.movingKey;
+    const movingRow = state.movingRow;
+    const isSameSlot = isMoveMode && movingRow && String(movingRow.Slot) === String(state.activeSlot);
+    for (let depth = 1; depth <= zoneView.maxDepth; depth += 1) {
+      const depthData = depthMap[depth] || { depth, label: depthLabel(depth), pallets: [], maxPallets: 0 };
+      const selectedDepth = Number(depth) === Number(state.activeDepth) ? 'selected' : '';
+      const sortedPallets = (depthData.pallets || []).slice().sort((a, b) => a.Level - b.Level);
+
+      // 容量計算
+      const maxP = Number(depthData.maxPallets) || 0;
+      const isSourceDepth = isSameSlot && movingRow && Number(movingRow.Depth) === Number(depth);
+      const effectiveCount = sortedPallets.length - (isSourceDepth ? 1 : 0);
+      const isFull = isMoveMode && maxP > 0 && effectiveCount >= maxP;
+
+      // 判斷這排在試算表中是否真實存在（有容量或有棧板）
+      const depthExists = (maxP > 0 || sortedPallets.length > 0);
+
+      var stackInner = '';
+      if (isMoveMode) {
+        if (depthExists) {
+          // 真實存在的排才顯示放置區，以物理棧板組為單位排列
+          var mvGroups = buildPalletGroups_(sortedPallets);
+          var mvLvCnt = 0;
+          stackInner += '<div class="drop-zone" data-depth="' + depth + '" data-level="1" onclick="openMoveConfirm(\'' + esc(state.activeSlot) + '\',' + depth + ',1)"></div>';
+          mvGroups.forEach(function(group) {
+            var isMovingGroup = state.movingGroupKeys.length > 0 &&
+              group.pallets.some(function(r) { return state.movingGroupKeys.indexOf(r.PalletKey) >= 0; });
+            var gpHtml = group.pallets.map(function(row) {
+              var wiggle = isMovingGroup ? ' wiggling' : '';
+              return '<button class="pallet ' + paletteClass(row) + wiggle + '" data-key="' + esc(row.PalletKey || '') + '">' +
+                '<div class="pallet-sku">' + skuHtml(row.SKU || '-') + '</div>' +
+                '<div class="pallet-meta"><span>' + esc(row.Batch || '-') + '</span><span>' + esc(row.BoxQty || 0) + '箱</span></div>' +
+                '</button>';
+            }).join('');
+            if (group.pallets.length > 1) {
+              stackInner += '<div class="pallet-group' + (isMovingGroup ? ' group-moving' : '') + '">' + gpHtml + '</div>';
+            } else {
+              stackInner += gpHtml;
+            }
+            mvLvCnt += group.pallets.length;
+            var nextLv2 = mvLvCnt + 1;
+            stackInner += '<div class="drop-zone" data-depth="' + depth + '" data-level="' + nextLv2 + '" onclick="openMoveConfirm(\'' + esc(state.activeSlot) + '\',' + depth + ',' + nextLv2 + ')"></div>';
+          });
+        } else {
+          // 此列目前沒有這排 → 仍可放置（後端會自動建立排段）
+          stackInner = '<div class="drop-zone drop-zone-new" data-depth="' + depth + '" data-level="1" onclick="openMoveConfirm(\'' + esc(state.activeSlot) + '\',' + depth + ',1)">+ 新增此排</div>';
+        }
+      } else {
+        // 非移動模式：依物理棧板組渲染，多 SKU 組加框
+        var viewGroups = buildPalletGroups_(sortedPallets);
+        stackInner = viewGroups.map(function(group) {
+          var palletHtml = group.pallets.map(function(row) {
+            var selected = row.PalletKey === state.activePalletKey ? 'selected' : '';
+            return '<button class="pallet ' + paletteClass(row) + ' ' + selected + '" data-key="' + esc(row.PalletKey || '') + '" onclick="openEditByKey(' + JSON.stringify(row.PalletKey || '') + '); return false;"><div class="pallet-sku">' + skuHtml(row.SKU || '-') + '</div><div class="pallet-meta"><span>' + esc(row.Batch || '-') + '</span><span>' + esc(row.BoxQty || 0) + '箱</span></div></button>';
+          }).join('');
+          if (group.pallets.length > 1) {
+            return '<div class="pallet-group">' + palletHtml + '</div>';
+          }
+          return palletHtml;
+        }).join('');
+      }
+
+      // 容量徽章
+      var capBadge = '';
+      if (maxP > 0) {
+        var capClass = isMoveMode ? (isFull ? ' cap-full' : (effectiveCount >= maxP - 1 ? ' cap-warn' : '')) : '';
+        capBadge = '<span class="depth-cap' + capClass + '">' + sortedPallets.length + '/' + maxP + '</span>';
+      }
+
+      const fullClass = (isMoveMode && isFull) ? ' depth-full' : '';
+      columns.push('<div class="depth-col ' + selectedDepth + fullClass + '"><div class="depth-col-head">' + esc(depthData.label) + capBadge + '</div><div class="stack">' + stackInner + '</div></div>');
+    }
+
+    var gridClass = isMoveMode ? 'cross-grid move-mode' : 'cross-grid';
+    // 頂部「X倉Y區Z列」標籤
+    var _sm3 = (state.activeSheet || '').match(/^([A-C])-([A-H])區$/);
+    var _slotLabel;
+    if (_sm3) {
+      _slotLabel = _sm3[1] + '倉' + _sm3[2] + '區 <strong>' + esc(state.activeSlot) + '</strong> 列';
+    } else {
+      _slotLabel = esc(state.activeSheet || '') + ' <strong>' + esc(state.activeSlot) + '</strong> 列';
+    }
+    var undoBtn = _undoRedoBtnHtml_('undo', 'banner-undo-btn');
+    var redoBtn = _undoRedoBtnHtml_('redo', 'banner-redo-btn');
+    var slotBanner = '<div class="cross-slot-banner"><span class="banner-loc">' + _slotLabel + '</span><span class="banner-undo-redo">' + undoBtn + redoBtn + '</span></div>';
+    $("crossSection").innerHTML = slotBanner + '<div class="' + gridClass + '">' + columns.join('') + '</div>';
+
+    // Move bar
+    if (isMoveMode) {
+      var srcRow = state.movingRow;
+      var groupTag = state.movingGroupKeys.length > 1 ? ' <span class="move-bar-group-tag">棧板組×' + state.movingGroupKeys.length + '</span>' : '';
+      var moveBarHtml = '<div class="move-bar">' +
+        '<span class="move-bar-sku">' + esc(srcRow ? srcRow.SKU || '-' : '-') + groupTag + '</span>' +
+        '<button class="move-bar-slot-btn" onclick="openMoveSlotPicker()">移動到其它列</button>' +
+        '<button class="move-bar-cancel" onclick="cancelMoveMode()">取消</button>' +
+        '</div>';
+      $("crossSection").insertAdjacentHTML('afterend', moveBarHtml);
+    } else {
+      var existingBar = document.querySelector('.move-bar');
+      if (existingBar) existingBar.remove();
+    }
+
+    focusSearchTarget();
+  }
+
+  function renderCellItems() {
+    const items = currentDepthPallets();
+    const q = currentSearchQuery();
+    if (!items.length) {
+      $("cellItems").innerHTML = '<div class="empty">這一格沒有可用 item</div>';
+      return;
+    }
+    if (!state.activeItemKey) state.activeItemKey = items[0].PalletKey || '';
+    $("cellItems").innerHTML = items.map((row, idx) => {
+      const active = row.PalletKey === state.activeItemKey ? 'active' : '';
+      const hit = rowMatchesQuery(row, q) ? 'pulse' : '';
+      const pz = row.PiecesPerBox ? '<span class="chip-pz"> · ' + esc(String(row.PiecesPerBox)) + 'pz/箱</span>' : '';
+      const qsBox = qtyStatusHtml(row.BoxQtyFontColor);
+      const qsPiece = qtyStatusHtml(row.PieceQtyFontColor);
+      const qsTag = qsBox || qsPiece || '';
+      return '<button class="item-chip ' + active + ' ' + hit + '" data-key="' + esc(row.PalletKey || '') + '" onclick="selectItem(' + JSON.stringify(row.PalletKey || '') + '); return false;"><div class="item-chip-top"><strong>' + skuHtml(row.SKU || '-') + '</strong><span class="item-chip-batch">' + esc(row.Batch || '-') + pz + '</span></div><div class="item-chip-bottom"><span>' + esc(depthLabel(row.Depth || state.activeDepth)) + '</span><span>第 ' + esc(idx + 1) + ' 板' + qsTag + '</span></div></button>';
+    }).join('');
+  }
+
+  function selectItem(palletKey) {
+    state.activeItemKey = palletKey;
+    state.activePalletKey = palletKey;
+    renderCellItems();
+    renderItemDetail();
+    renderDetailPanel();
+  }
+
+  function renderItemDetail() {
+    const row = currentDepthPallets().find(item => item.PalletKey === state.activeItemKey) || currentDepthPallets()[0] || null;
+    if (!row) {
+      $("itemDetail").className = 'item-detail empty';
+      $("itemDetail").innerHTML = '先點一個 item 看完整資料';
+      return;
+    }
+    state.activeItemKey = row.PalletKey || '';
+    state.activePalletKey = row.PalletKey || '';
+
+    const boxQty = row.BoxQty != null ? Number(row.BoxQty) : 0;
+    const pieceQty = row.PieceQty != null ? Number(row.PieceQty) : 0;
+    const kgBox = (row.KgPerBox != null && row.KgPerBox !== '') ? Math.ceil(Number(row.KgPerBox)) + ' KG' : '-';
+    const kgPallet = (row.KgPerPallet != null && row.KgPerPallet !== '') ? Math.ceil(Number(row.KgPerPallet)) + ' KG' : '-';
+    const pzStr = row.PiecesPerBox ? String(row.PiecesPerBox) + ' pz/箱' : '';
+    const rawImg = row.SinglePieceImage || ((row.Branches || [])[0] || {}).SinglePieceImage || '';
+    const imgUrl = driveThumbUrl(rawImg);
+    const imgHtml = imgUrl ? '<div class="item-img-wrap"><img class="item-img" src="' + esc(imgUrl) + '" alt="' + esc(row.SKU || '') + '" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></div>' : '';
+
+    // 倉位編碼 — 標籤深黃、數值白色
+    var _lp = function(v,l){ return '<span class="loc-val">'+esc(String(v))+'</span><span class="loc-label">'+l+'</span>'; };
+    var _sm2 = (row.Sheet||'').match(/^([A-C])-([A-H])區$/);
+    var locHtml;
+    if (_sm2) {
+      locHtml = _lp(_sm2[1],'倉') + _lp(_sm2[2],'區') + _lp(row.Slot||'-','列') + _lp(row.Depth||0,'排') + _lp(row.Level||'-','層');
+    } else {
+      var _a2 = (row.Sheet||'').replace(/-/g,'_').replace(/區$/,'');
+      locHtml = _lp(_a2,'區') + _lp(row.Slot||'-','列') + _lp(row.Depth||0,'排') + _lp(row.Level||'-','層');
+    }
+
+    $("itemDetail").className = 'item-detail';
+    $("itemDetail").innerHTML =
+      '<div class="item-summary">' +
+        '<div class="item-sum-row1">' +
+          '<span class="item-sum-sku">' + esc(row.SKU || '-') + '</span>' +
+          '<span class="item-sum-batch"><span class="batch-label">批號</span>' + esc(row.Batch || '-') + '</span>' +
+        '</div>' +
+        '<div class="item-sum-qty">' +
+          '<input id="inlineBoxQty" type="number" inputmode="numeric" min="0" step="1" class="qty-input qty-box-input" value="' + esc(boxQty) + '" title="箱數">' +
+          '<small style="color:#68c8ff;font-size:14px;font-weight:700;align-self:flex-end;padding-bottom:4px">箱' + qtyStatusHtml(row.BoxQtyFontColor) + '</small>' +
+          '<input id="inlinePieceQty" type="number" inputmode="numeric" min="0" step="1" class="qty-input qty-piece-input" value="' + esc(pieceQty) + '" title="片數">' +
+          '<small style="color:#7ff0a6;font-size:14px;font-weight:700;align-self:flex-end;padding-bottom:4px">片' + qtyStatusHtml(row.PieceQtyFontColor) + '</small>' +
+          '<button class="qty-save-btn" onclick="saveInlineQty(' + JSON.stringify(row.PalletKey || '') + ')">💾 儲存</button>' +
+        '</div>' +
+        '<div class="item-sum-loc-row">' +
+          '<span class="loc-code">' + locHtml + '</span>' +
+          (pzStr ? '<span class="loc-pz">' + esc(pzStr) + '</span>' : '') +
+        '</div>' +
+        '<button id="itemDetailToggle" class="detail-toggle" onclick="toggleItemSpecs()">查看完整資訊 ▼</button>' +
+      '</div>' +
+      '<div class="item-specs hidden" id="itemSpecs">' +
+        imgHtml +
+        '<div class="detail-grid">' +
+          '<div class="detail-box"><small>品牌</small><strong>' + esc(detailValue(row.Brand)) + '</strong></div>' +
+          '<div class="detail-box"><small>系列</small><strong>' + esc(detailValue(row.Series || row.ChineseSeries)) + '</strong></div>' +
+          '<div class="detail-box detail-box-wide"><small>原文名稱</small><strong>' + esc(detailValue(row.OriginalName)) + '</strong></div>' +
+          '<div class="detail-box"><small>尺寸</small><strong>' + esc(detailValue(row.Size)) + '</strong></div>' +
+          '<div class="detail-box"><small>箱裝數</small><strong>' + esc(detailValue(row.PiecesPerBox)) + '</strong></div>' +
+          '<div class="detail-box"><small>一板幾箱</small><strong>' + esc(detailValue(row.BoxesPerPallet)) + '</strong></div>' +
+          '<div class="detail-box"><small>每箱公斤</small><strong>' + kgBox + '</strong></div>' +
+          '<div class="detail-box"><small>一板幾公斤</small><strong>' + kgPallet + '</strong></div>' +
+          '<div class="detail-box"><small>漢樺編號</small><strong>' + esc(detailValue(row.HanhwaCode)) + '</strong></div>' +
+          '<div class="detail-box"><small>狀態</small><strong>' + esc(detailValue(row.IsLastPallet ? '最後一板' : row.Status)) + '</strong></div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderSearch() {
+    const q = currentSearchQuery();
+    const wrap = $("searchWrap");
+    renderZoneChips();
+    renderOverviewTable();
+    renderCellItems();
+    renderItemDetail();
+    if (!hasSearchQuery(q)) {
+      wrap.classList.add("hidden");
+      $("searchResults").innerHTML = "";
+      return;
+    }
+
+    wrap.classList.remove("hidden");
+    // 有搜尋時，自動捲到區域 chips
+    const zoneSection = $("zoneChips") && $("zoneChips").parentElement;
+    if (zoneSection) zoneSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (!state.searchReady) {
+      $("searchResults").innerHTML = '<div class="empty">全區索引載入中，請稍候 1 到 2 秒再試。</div>';
+      return;
+    }
+
+    const matches = state.searchRows.filter(row => rowMatchesQuery(row, q)).slice(0, 60);
+    if (!matches.length) {
+      $("searchResults").innerHTML = '<div class="empty">找不到符合條件的棧板</div>';
+      return;
+    }
+
+    $("searchResults").innerHTML = matches.map(row => {
+      const depth = row.Depth || 0;
+      const branch = (row.Branches || []).find(b => b.Company && b.Company !== '未知分公司');
+      const cc = companyClass(branch ? branch.Company : '');
+      const loc = locationCode(row);
+      const boxQty = row.BoxQty != null ? Number(row.BoxQty) : 0;
+      const pieceQty = row.PieceQty != null ? Number(row.PieceQty) : 0;
+      return '<button class="search-card ' + cc + '" data-sheet="' + esc(row.Sheet || '') + '" data-slot="' + esc(row.Slot || '') + '" data-depth="' + esc(depth) + '" data-key="' + esc(row.PalletKey || '') + '" onclick="jumpFromSearch(' + JSON.stringify(row.Sheet || '') + ',' + JSON.stringify(row.Slot || '') + ',' + depth + ',' + JSON.stringify(row.PalletKey || '') + '); return false;">' +
+        '<div class="sc-top"><span class="sc-sku">' + esc(row.SKU || '-') + '</span><span class="sc-batch">' + esc(row.Batch || '-') + '</span></div>' +
+        '<div class="sc-loc">' + esc(loc) + '</div>' +
+        '<div class="sc-qty"><span class="sc-box">' + esc(boxQty) + '<small>箱</small></span><span class="sc-piece">' + esc(pieceQty) + '<small>片</small></span></div>' +
+        '</button>';
+    }).join("");
+  }
+
+  async function jumpFromSearch(sheetName, slotId, depth, palletKey) {
+    await loadZone(sheetName, slotId, depth, palletKey);
+    state.activeItemKey = palletKey || state.activeItemKey;
+    renderDetailPanel();
+    focusSearchTarget();
+    if (isMobile()) document.body.style.overflow = 'hidden';
+  }
+
+  function findRowByKey(palletKey) {
+    const zoneView = state.activeZoneView;
+    if (!zoneView) return null;
+    for (const slot of (zoneView.slots || [])) {
+      const found = (slot.pallets || []).find(r => r.PalletKey === palletKey);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function openEditByKey(palletKey) {
+    const row = findRowByKey(palletKey);
+    if (!row) return;
+    state.activePalletKey = palletKey;
+    state.editingRow = row;
+    $("editMeta").textContent = [row.Sheet, '格 ' + row.Slot, row.DepthLabel || row.Stack, '第 ' + row.Level + ' 層'].join(' / ');
+    $("editSku").value = row.SKU || '';
+    $("editBatch").value = row.Batch || '';
+    $("editBoxes").value = Number(row.BoxQty || 0);
+    $("editPieces").value = Number(row.PieceQty || 0);
+    $("editStatus").value = row.IsLastPallet ? '最後一板' : (row.Status || '正常庫存');
+    var pzHint = $("editPzHint");
+    if (pzHint) pzHint.textContent = row.PiecesPerBox ? '(' + row.PiecesPerBox + '片/箱)' : '';
+    $("editModal").classList.remove("hidden");
+    renderDetailPanel();
+  }
+
+  function closeEdit() {
+    if (state.saving) return;
+    state.editingRow = null;
+    $("editModal").classList.add("hidden");
+  }
+
+  async function saveEdit() {
+    if (state.saving || !state.editingRow) return;
+    const oldData = state.editingRow;
+    const newData = {
+      Sheet: oldData.Sheet,
+      SKU: $("editSku").value.trim(),
+      Batch: $("editBatch").value.trim(),
+      BoxQty: $("editBoxes").value,
+      PieceQty: $("editPieces").value,
+      Status: $("editStatus").value
+    };
+    if (!newData.SKU) {
+      setStatus("品號不可空白", "bad");
+      return;
+    }
+
+    state.saving = true;
+    setStatus('正在寫回 ' + oldData.Sheet + ' / 格 ' + oldData.Slot + ' / ' + (oldData.DepthLabel || oldData.Stack) + ' / 第 ' + oldData.Level + ' 層...');
+    try {
+      const result = await gas("updateWarehousePallet", { oldData, newData, operator: getOperator() });
+      markWriteTime_(oldData.Sheet);
+      state.activeZoneView = result.zoneView;
+      state.editingRow = null;
+      $("editModal").classList.add("hidden");
+      renderOverviewTable();
+      renderDetailPanel();
+      setStatus('已寫回：' + newData.SKU + '，並重新載入 ' + result.zoneView.sheet, 'ok');
+    } catch (err) {
+      fail(err);
+    } finally {
+      state.saving = false;
+    }
+  }
+
+  async function saveInlineQty(palletKey) {
+    if (state.saving) return;
+    const row = findRowByKey(palletKey);
+    if (!row) { setStatus('找不到棧板資料', 'bad'); return; }
+    const boxInput = $('inlineBoxQty');
+    const pieceInput = $('inlinePieceQty');
+    const newBoxQty = boxInput ? Number(boxInput.value) : Number(row.BoxQty || 0);
+    const newPieceQty = pieceInput ? Number(pieceInput.value) : Number(row.PieceQty || 0);
+    state.saving = true;
+    setStatus('正在寫回 ' + row.Sheet + ' ' + row.Slot + ' L' + row.Level + '...');
+    try {
+      const result = await gas("updateWarehousePallet", {
+        oldData: row,
+        newData: {
+          Sheet: row.Sheet,
+          SKU: row.SKU || '',
+          Batch: row.Batch || '',
+          BoxQty: newBoxQty,
+          PieceQty: newPieceQty,
+          Status: row.IsLastPallet ? '最後一板' : (row.Status || '正常庫存')
+        },
+        operator: getOperator()
+      });
+      markWriteTime_(row.Sheet);
+      cacheSet('zone_' + row.Sheet, result.zoneView);
+      state.activeZoneView = result.zoneView;
+      renderOverviewTable();
+      renderDetailPanel();
+      setStatus('已儲存：' + (row.SKU || row.Batch || ''), 'ok');
+    } catch (err) {
+      fail(err);
+    } finally {
+      state.saving = false;
+    }
+  }
+
+  function setupListeners() {
+    $("editModal").addEventListener("click", e => {
+      if (e.target.id === "editModal") closeEdit();
+    });
+    $("searchSku").addEventListener("input", renderSearch);
+    $("searchBatch").addEventListener("input", renderSearch);
+    $("zoneChips").addEventListener("click", e => { const btn = e.target.closest(".zone-chip[data-sheet]"); if (btn) loadZone(btn.dataset.sheet); });
+    $("overviewTableWrap").addEventListener("click", e => { const btn = e.target.closest(".cell-btn[data-slot][data-depth]"); if (btn) selectCell(btn.dataset.slot, Number(btn.dataset.depth)); });
+    $("searchResults").addEventListener("click", e => { const btn = e.target.closest(".search-card[data-sheet]"); if (btn) jumpFromSearch(btn.dataset.sheet, btn.dataset.slot, Number(btn.dataset.depth), btn.dataset.key || ''); });
+    $("cellItems").addEventListener("click", e => { const btn = e.target.closest(".item-chip[data-key]"); if (btn) selectItem(btn.dataset.key); });
+    // 一般點擊（非移動模式才觸發編輯）
+    $("crossSection").addEventListener("click", e => {
+      if (state.movingKey) return;
+      const btn = e.target.closest(".pallet[data-key]");
+      if (btn) openEditByKey(btn.dataset.key);
+    });
+
+    // 滑鼠長按（桌面版測試用）→ 進入移動模式
+    $("crossSection").addEventListener("mousedown", function(e) {
+      const btn = e.target.closest(".pallet[data-key]");
+      if (!btn || e.button !== 0) return;
+      if (state.movingKey) return;
+      var key = btn.dataset.key;
+      _mt.timer = setTimeout(function() {
+        startMoveMode(key);
+        setStatus('移動模式：點擊目標格子的空位放置');
+      }, 500);
+    });
+    $("crossSection").addEventListener("mouseup", function() {
+      if (_mt.timer) { clearTimeout(_mt.timer); _mt.timer = null; }
+    });
+
+    // 長按偵測 → 進入移動模式
+    $("crossSection").addEventListener("touchstart", function(e) {
+      const btn = e.target.closest(".pallet[data-key]");
+      if (!btn) return;
+      const key = btn.dataset.key;
+      _mt.startX = e.touches[0].clientX;
+      _mt.startY = e.touches[0].clientY;
+      if (state.movingKey === key) {
+        // 已在移動模式：再次長按開始拖拉
+        _mt.timer = setTimeout(function() {
+          _createGhost(e.touches[0].clientX, e.touches[0].clientY);
+        }, 120);
+        return;
+      }
+      if (state.movingKey) return; // 另一板在移動中
+      _mt.timer = setTimeout(function() {
+        startMoveMode(key);
+        _createGhost(_mt.startX, _mt.startY);
+      }, 500);
+    }, { passive: true });
+
+    $("crossSection").addEventListener("touchmove", function(e) {
+      var dx = e.touches[0].clientX - _mt.startX;
+      var dy = e.touches[0].clientY - _mt.startY;
+      if (_mt.timer && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+        clearTimeout(_mt.timer); _mt.timer = null;
+      }
+      if (!_mt.dragging) return;
+      e.preventDefault();
+      _updateGhostPos(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+
+    $("crossSection").addEventListener("touchend", function() {
+      if (_mt.timer) { clearTimeout(_mt.timer); _mt.timer = null; }
+      if (_mt.dragging) _dropOnZone();
+    });
+    window.addEventListener('resize', () => {
+      if (!isMobile()) {
+        $("detailBackdrop").classList.add('hidden');
+        document.body.style.overflow = '';
+      } else if (state.activeSlot && state.activeDepth) {
+        $("detailBackdrop").classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+      }
+    });
+  }
+
+  // 禁止長按觸發複製/右鍵選單，避免干擾格子移動操作
+  document.addEventListener('contextmenu', function(e) {
+    if (e.target.closest('.stack, .cell-btn, .overview-table')) e.preventDefault();
+  });
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => { setupListeners(); boot(); });
+  } else {
+    setupListeners();
+    boot();
+  }
+</script>

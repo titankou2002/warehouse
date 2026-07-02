@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <?!= include_('warehouse_grid_ui_css'); ?>
+</head>
+<body>
+  <main class="app-shell">
+    <section class="app-panel">
+      <header class="hero">
+        <div>
+          <h1>鈦傳速智慧倉儲系統 <span id="ver" class="ver-tag"></span></h1>
+          <div class="cache-row">
+            <span id="cacheInfo" class="cache-info loading">準備連線...</span>
+            <button class="cache-refresh" onclick="forceRefresh()" title="清除快取重新讀取">🔄</button>
+            <div id="undoRedoWrap" class="undo-redo-wrap" style="display:none"></div>
+          </div>
+          <div class="operator-row">
+            <span class="operator-label">操作者</span>
+            <input id="operatorInput" class="operator-input" placeholder="輸入姓名" autocomplete="off" oninput="saveOperator()" onchange="saveOperator()">
+          </div>
+        </div>
+      </header>
+
+      <section class="topbar">
+        <div class="search-dual">
+          <input id="searchSku" class="search" placeholder="搜尋編號 / SKU">
+          <input id="searchBatch" class="search" placeholder="搜尋批號">
+        </div>
+      </section>
+
+      <section id="searchWrap" class="search-wrap hidden">
+        <div class="section-title">搜尋結果</div>
+        <div id="searchResults" class="search-results"></div>
+      </section>
+
+      <section>
+        <div class="section-title">區域</div>
+        <div id="zoneChips" class="zone-chips"></div>
+      </section>
+
+      <section class="overview-panel">
+        <div class="overview-head">
+          <div class="section-title">俯視圖</div>
+          <div class="zoom-controls">
+            <button class="ghost-btn zoom-btn" onclick="zoomOut()">－</button>
+            <button class="ghost-btn zoom-btn" onclick="zoomIn()">＋</button>
+          </div>
+        </div>
+        <div id="overviewTableWrap" class="overview-scroll"></div>
+      </section>
+
+      <section id="detailPanel" class="detail-panel hidden">
+        <button class="detail-close-x" onclick="closeDetail()" title="關閉">✕</button>
+        <div class="detail-header">
+          <div class="detail-header-left">
+            <div id="slotTitle" class="section-title">剖面圖</div>
+            <div id="slotMeta" class="section-subtitle">先從俯視圖點一個格子</div>
+          </div>
+          <div id="warehouseMapWrap" class="warehouse-map-wrap detail-map"></div>
+        </div>
+        <div id="cellItems" class="cell-items"></div>
+        <div id="itemDetail" class="item-detail empty">先點一個 item 看完整資料</div>
+        <div id="crossSection" class="cross-section"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="detailBackdrop" class="detail-backdrop hidden" onclick="closeDetail()"></div>
+
+  <div id="editModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <div class="section-title">更新棧板資料</div>
+          <div id="editMeta" class="section-subtitle">-</div>
+        </div>
+        <button class="ghost-btn" onclick="closeEdit()">關閉</button>
+      </div>
+      <div class="form-grid">
+        <label class="wide">編號<input id="editSku"></label>
+        <label class="wide">批號<input id="editBatch"></label>
+        <div class="qty-row">
+          <label class="qty-label">箱數<small id="editPzHint" class="pz-hint"></small><input id="editBoxes" type="number" inputmode="numeric" min="0" step="1"></label>
+          <label class="qty-label">片數<input id="editPieces" type="number" inputmode="numeric" min="0" step="1"></label>
+        </div>
+        <label class="wide">狀態<select id="editStatus"><option>正常庫存</option><option>混板/散板</option><option>專案庫存</option><option>最後一板</option></select></label>
+      </div>
+      <div class="action-bar">
+        <button class="ghost-btn" onclick="closeEdit()">取消</button>
+        <button class="primary-btn" onclick="saveEdit()">更新</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 選格子 overlay（換列用） -->
+  <div id="moveSlotOverlay" class="move-slot-overlay hidden">
+    <div class="move-slot-card">
+      <div class="modal-head">
+        <div>
+          <div class="section-title">選擇目標格子</div>
+          <div id="moveSlotMeta" class="section-subtitle">-</div>
+        </div>
+        <button class="ghost-btn" onclick="closeMoveSlotPicker()">取消</button>
+      </div>
+      <div id="moveZoneRow" class="move-zone-row"></div>
+      <div id="moveDepthPicker" class="move-depth-picker hidden"></div>
+      <div id="moveSlotList" class="move-slot-list"></div>
+    </div>
+  </div>
+
+  <!-- 移動確認 overlay -->
+  <div id="moveConfirmOverlay" class="move-confirm-overlay hidden">
+    <div class="move-confirm-card">
+      <div class="section-title">確認移動</div>
+      <div id="moveConfirmBody" class="move-confirm-body"></div>
+      <div class="action-bar">
+        <button class="ghost-btn" onclick="cancelMoveMode()">取消</button>
+        <button class="primary-btn" id="moveConfirmBtn" onclick="executeMove()" ontouchend="event.preventDefault(); executeMove()">確認移動</button>
+      </div>
+    </div>
+  </div>
+
+  <?!= include_('warehouse_grid_ui_js'); ?>
+</body>
+</html>

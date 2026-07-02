@@ -1,0 +1,17 @@
+**/*
+!appsscript.json
+!DataCache.js
+!index_gas.html
+!Main.gs
+!WarehouseRead.gs
+!WarehouseParse.gs
+!WarehouseView.gs
+!WarehouseWriteback.gs
+!warehouse_ui.html
+!warehouse_ui_css.html
+!warehouse_ui_js.html
+!程式碼.js
+
+!warehouse_grid_ui.html
+!warehouse_grid_ui_css.html
+!warehouse_grid_ui_js.html

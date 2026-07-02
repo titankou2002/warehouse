@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <?!= include_('warehouse_ui_css'); ?>
+</head>
+<body>
+  <main class="app-shell">
+    <section class="app-panel">
+      <header class="hero">
+        <div>
+          <div class="eyebrow">warehouse_wms_v2</div>
+          <h1>鈦傳速智慧倉位</h1>
+          <p>用剖面圖看同一格內各排的堆疊，先把查詢、定位、更新做對。</p>
+        </div>
+        <nav class="hero-links">
+          <a href="?debug=1">診斷</a>
+          <a href="?legacy=1">舊版</a>
+        </nav>
+      </header>
+
+      <section class="topbar">
+        <div id="status" class="status">準備連線後端...</div>
+        <input id="search" class="search" placeholder="全區搜尋 SKU / 批號 / 漢樺編號 / 區域">
+      </section>
+
+      <section id="searchWrap" class="search-wrap hidden">
+        <div class="section-title">搜尋結果</div>
+        <div id="searchResults" class="search-results"></div>
+      </section>
+
+      <section>
+        <div class="section-title">區域</div>
+        <div id="zoneChips" class="zone-chips"></div>
+      </section>
+
+      <section class="workspace-grid">
+        <aside class="slot-panel">
+          <div class="section-title">同區格位總覽</div>
+          <div id="slotRail" class="slot-rail"></div>
+        </aside>
+
+        <section class="cross-panel">
+          <div class="cross-header">
+            <div>
+              <div id="slotTitle" class="section-title">剖面圖</div>
+              <div id="slotMeta" class="section-subtitle">等待選擇格位</div>
+            </div>
+            <div class="legend">
+              <span class="swatch red"></span><small>混板/散板</small>
+              <span class="swatch yellow"></span><small>最後一板/混板</small>
+              <span class="swatch white"></span><small>正常</small>
+              <span class="swatch green"></span><small>專案</small>
+            </div>
+          </div>
+          <div id="crossSection" class="cross-section"></div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <div id="editModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <div class="section-title">更新棧板資料</div>
+          <div id="editMeta" class="section-subtitle">-</div>
+        </div>
+        <button class="ghost-btn" onclick="closeEdit()">關閉</button>
+      </div>
+      <div class="form-grid">
+        <label class="wide">品號<input id="editSku"></label>
+        <label>批號<input id="editBatch"></label>
+        <label>狀態<select id="editStatus"><option>正常庫存</option><option>混板/散板</option><option>專案庫存</option><option>最後一板</option></select></label>
+        <label>箱數<input id="editBoxes" type="number" min="0" step="1"></label>
+        <label>片數<input id="editPieces" type="number" min="0" step="1"></label>
+      </div>
+      <div class="hint-box">搬移與補位規則下一階段實裝。這一版先保留同一板的資料更新，畫面則改成倉位剖面。</div>
+      <div class="action-bar">
+        <button class="ghost-btn" onclick="closeEdit()">取消</button>
+        <button class="primary-btn" onclick="saveEdit()">寫回試算表</button>
+      </div>
+    </div>
+  </div>
+
+  <?!= include_('warehouse_ui_js'); ?>
+</body>
+</html>
