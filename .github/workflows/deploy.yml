@@ -40,18 +40,21 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -p 21098 -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
-          rsync -avz --delete \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='.gitignore' \
-            --exclude='*.gs' \
-            --exclude='*.py' \
-            --exclude='appsscript.json' \
-            --exclude='CURRENT_PROGRESS.md' \
-            --exclude='WAREHOUSE_PALLET_RULES.md' \
-            --exclude='PROGRESS_0703.md' \
-            -e "ssh -i ~/.ssh/id_rsa -p 21098 -o StrictHostKeyChecking=no" \
-            ./ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH"
+          tar czf /tmp/deploy.tar.gz \
+            --exclude='./.git' \
+            --exclude='./.github' \
+            --exclude='./.gitignore' \
+            --exclude='./*.gs' \
+            --exclude='./*.py' \
+            --exclude='./appsscript.json' \
+            --exclude='./CURRENT_PROGRESS.md' \
+            --exclude='./WAREHOUSE_PALLET_RULES.md' \
+            --exclude='./PROGRESS_0703.md' \
+            ./
+
+          cat /tmp/deploy.tar.gz | ssh -i ~/.ssh/id_rsa -p 21098 -o StrictHostKeyChecking=no \
+            "$SSH_USER@$SSH_HOST" \
+            "mkdir -p $DEPLOY_PATH && cd $DEPLOY_PATH && tar xzf - --strip-components=1"
 
       - name: Restart Node.js App
         env:
