@@ -28,23 +28,37 @@ jobs:
           printf 'PORT=3000\nSHEET_ID=%s\nNODE_ENV=production\n' \
             '${{ secrets.SHEET_ID }}' > .env
 
-      - name: Deploy to cPanel via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          port: 990
-          local-dir: ./
-          server-dir: ${{ secrets.FTP_TARGET_DIR }}
-          exclude: |
-            .git/**
-            .gitignore
-            .github/**
-            .claspignore
-            *.gs
-            *.py
-            appsscript.json
-            CURRENT_PROGRESS.md
-            WAREHOUSE_PALLET_RULES.md
+      - name: Deploy via SSH/SCP
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='*.gs' \
+            --exclude='*.py' \
+            --exclude='appsscript.json' \
+            --exclude='CURRENT_PROGRESS.md' \
+            --exclude='WAREHOUSE_PALLET_RULES.md' \
+            --exclude='PROGRESS_0703.md' \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            ./ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH"
+
+      - name: Restart Node.js App
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            "$SSH_USER@$SSH_HOST" \
+            "cd $DEPLOY_PATH && ~/.cpanel/caches/cloudlinux-alt-nodejs20/bin/npm install --omit=dev --ignore-scripts && passenger-config restart-app $DEPLOY_PATH || true"
