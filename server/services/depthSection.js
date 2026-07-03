@@ -51,7 +51,7 @@ function readDepthSection(grid, prodCol, qtyCol, range) {
     const val = cleanValue(cell.value);
     const bg  = identifyBgColor(cell.bgColor);
 
-    if (val && val.includes('排')) { r++; continue; }
+    if (val && val.includes('排') && val.includes('第')) { r++; continue; }
 
     // 白色單列（混在彩色段裡）
     if (bg === 'WHITE') {

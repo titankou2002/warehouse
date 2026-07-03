@@ -536,3 +536,293 @@ grep -n "你新加的代碼關鍵字" Main.js   # 若找不到，代表 push 沒
 - `clearWarehouseSpreadsheetIdOverride_()` → 清除 override，也是回到副本
 
 無法再從任何程式碼路徑切換到正本 Sheet。
+
+---
+
+## 📋 2026-07-03 Node.js 改寫完成 + 待辦：切換正式試算表
+
+### 目前狀態
+Node.js 改寫完成，已可在本機正常運行（`npm start` → `http://localhost:3000`）。
+
+目前連線的是**假庫位表**（副本，公開共用）：
+- SHEET_ID: `1QR6xLZrdSUzhkCNwBhE5EUYpdv8GqkESfj3ELzNf59s`
+- 服務帳號：`warehouse@bigt-ai-test-make.iam.gserviceaccount.com`（在 `service-account.json`）
+
+### ⚠️ 上線前必做：切換到正式試算表
+
+1. **把服務帳號加入正式試算表的共用**
+   - 開正式庫位表 → 右上角「共用」
+   - 加入：`warehouse@bigt-ai-test-make.iam.gserviceaccount.com`
+   - 權限給「**編輯者**」
+   - 正式表目前有上鎖（不像假表開放給任何人），所以這步一定要做，否則 API 會被拒絕
+
+2. **更新 `.env` 的 SHEET_ID**
+   - 把 `SHEET_ID` 換成正式試算表的 ID
+   - 正式 ID 就在試算表網址 `/d/` 後面那一段
+
+3. **更新 GitHub Secret `SHEET_ID`**
+   - 進 `https://github.com/titankou2002/warehouse` → Settings → Secrets → 更新 `SHEET_ID`
+
+4. **Push 到 main 觸發自動部署到 cPanel**
+
+### 正式試算表 ID
+（尚未記錄，待確認後補上）
+
+---
+
+## 2026-07-03 Node.js 改寫進度詳細記錄
+
+### 已完成的檔案（rewrite/nodejs 分支）
+
+**server/sheets/**
+- `client.js` — Google Sheets API 連線，service account 單例
+- `reader.js` — 讀格子值＋顏色＋粗體格式（values + formatting 並行呼叫）
+- `writer.js` — batchSetValues / batchFormat / bgColorRequest / fontRequest / borderRequest / getSheetId
+
+**server/utils/**
+- `colorUtils.js` — hex → 顏色名稱（RED/YELLOW/GREEN/BLUE/ORANGE/PURPLE/GREY/WHITE）
+- `gridUtils.js` — findSlotProdCol / findDepthRowRange / findMaxDepth
+  - **重要**：支援中文數字排名（第一排/第二排...）與阿拉伯數字（第1排）兩種格式
+
+**server/services/**
+- `depthSection.js` — 讀一個排段（白色/彩色兩種格式），PalletGroupId 分組
+- `depthWriter.js` — 寫回棧板到 Sheet（彩色含外框、白色格式）
+- `moveService.js` — 移動單板 / 物理棧板群組，async-mutex 鎖避免同時寫入
+- `zoneViewService.js` — 產生前端用的 ZoneView 結構（與 GAS 相容格式）
+
+**server/routes/**
+- `inventory.js` — GET /api/inventory, GET /api/inventory/:sheet, GET /api/inventory/:sheet/slots
+- `move.js` — POST /api/move, POST /api/move/group
+- `undo.js` — POST /api/undo, POST /api/undo/redo（記憶體 stack，重啟清空）
+- `zones.js` — GET /api/zones, GET /api/zones/:sheet
+- `dispatch.js` — POST /api/dispatch（橋接層，把舊 GAS method 名稱對應到新服務）
+
+**server/app.js** — Express 入口，5 條路由 + static client/
+
+**client/index.html** — 原本 GAS 三個模板（HTML/CSS/JS）合併，只改 `gas()` 函數
+- `gas(method, ...args)` → `fetch('/api/dispatch', {method:'POST', body: JSON.stringify({method, args})})`
+- 所有 UI 邏輯、移動流程、ZoneMap 等**一行都沒動**
+
+### 環境設定
+- `.env` — SHEET_ID + PORT（已建立，指向假庫位表）
+- `service-account.json` — Google 服務帳號金鑰（bigt-ai-test-make 專案）
+  - 服務帳號 email: `warehouse@bigt-ai-test-make.iam.gserviceaccount.com`
+- 兩個檔案都在 `.gitignore`，不會上傳 GitHub
+
+### 本機測試結果
+- Google Sheets API 連線成功 ✅
+- 讀取 A-A區 slot 1：9排、13個棧板，SKU/批號/顏色/GroupId 全部正確 ✅
+- `npm start` → `http://localhost:3000` 正常啟動 ✅
+
+### 已知問題 / 尚未測試
+- [ ] 前端畫面顯示是否正常（等使用者確認）
+- [ ] 移動功能實際寫回試算表尚未測試
+- [ ] `updateWarehousePallet`（編輯棧板資料）尚未實作，dispatch 內目前沒有此 handler
+- [ ] GitHub Actions 部署到 cPanel 尚未確認（workflow 已寫好，待 push 到 main 觸發）
+
+
+---
+
+## 🚀 換電腦操作手冊
+
+### 一、拉程式碼
+
+```bash
+git clone https://github.com/titankou2002/warehouse.git
+cd warehouse
+git checkout rewrite/nodejs
+npm install
+```
+
+### 二、放機密檔案（這兩個沒有上 GitHub，要手動放）
+
+**① `.env`**（放在專案根目錄，和 package.json 同層）
+```
+SHEET_ID=1QR6xLZrdSUzhkCNwBhE5EUYpdv8GqkESfj3ELzNf59s
+PORT=3000
+```
+
+**② `service-account.json`**（放在專案根目錄）
+- 檔案在 Google Drive 找不到，因為 .gitignore 擋住了
+- 原始 JSON 在 Downloads 裡：`bigt-ai-test-make-f03556cfec17.json`
+- 複製過來改名就好：
+```bash
+cp ~/Downloads/bigt-ai-test-make-f03556cfec17.json ./service-account.json
+```
+- 或直接到 Google Cloud Console 重下載：
+  https://console.cloud.google.com → IAM → 服務帳號 → warehouse → 金鑰
+
+### 三、本機測試
+
+```bash
+npm start
+# 看到「倉儲系統啟動 port 3000」就成功
+# 開瀏覽器 http://localhost:3000
+```
+
+### 四、部署到 cPanel（自動）
+
+程式碼開發好之後，合併到 main 就自動觸發 GitHub Actions 部署：
+
+```bash
+# 目前在 rewrite/nodejs 分支開發
+git add .
+git commit -m "說明改了什麼"
+git push origin rewrite/nodejs
+
+# 確認沒問題後合併到 main 觸發部署
+git checkout main
+git merge rewrite/nodejs
+git push origin main
+# → GitHub Actions 自動 FTP 上傳到 cPanel
+```
+
+部署進度可在這裡看：
+https://github.com/titankou2002/warehouse/actions
+
+### 五、GitHub Secrets（已設定，不用再動）
+
+| Secret | 說明 |
+|---|---|
+| `GOOGLE_SERVICE_ACCOUNT` | service-account.json 整個 JSON 內容 |
+| `SHEET_ID` | 試算表 ID（目前是假庫位表） |
+| `FTP_HOST` | cPanel FTP 主機（elitile.tw） |
+| `FTP_USER` | FTP 帳號（elitiletw） |
+| `FTP_PASSWORD` | FTP 密碼 |
+| `FTP_TARGET_DIR` | cPanel 目標目錄 |
+
+管理位置：https://github.com/titankou2002/warehouse/settings/secrets/actions
+
+### 六、切換到正式試算表（上線前）
+
+1. 開正式庫位表 → 共用 → 加入 `warehouse@bigt-ai-test-make.iam.gserviceaccount.com`（編輯者）
+2. 把正式試算表 ID 更新到 `.env` 的 SHEET_ID
+3. 把 GitHub Secret `SHEET_ID` 也更新成正式 ID
+4. Push 到 main 觸發部署
+
+---
+
+## 📦 試算表格式語義說明（重要，開發必讀）
+
+### 棧板背景色 = 棧板物理狀態
+
+| 顏色 | 意義 |
+|---|---|
+| ⬜ 白底 | **完整板**：單一料號，原廠完整未拆過的棧板 |
+| 🔴 紅底 + 單一料號 | **散板**：這個料號的棧板已被拆箱過，剩餘散量 |
+| 🔴 紅底 + 多料號 | **混合板**：同一個物理棧板上放了多種不同料號 |
+| 🟡 黃底 + 單一料號 | **散板**：同上，與紅底意義相同 |
+| 🟡 黃底 + 多料號 | **混合板**：同上，與紅底意義相同 |
+| 🟢 綠底 | **專案庫存** |
+
+> **紅底與黃底沒有語義差異**，只是視覺上交替使用讓肉眼好區分同一庫位內的不同棧板。
+>
+> 判斷邏輯：
+> - 白底 → 看到幾個料號都一樣，這是完整原廠板
+> - 紅/黃底 + 只有 1 個料號 → 散板（拆過了，剩餘的量）
+> - 紅/黃底 + 2個以上料號被同一個外框圍起來 → 混合板（多種產品共用一個棧板）
+
+### 數量字色 = 庫存回報狀態
+
+| 字色 | 意義 |
+|---|---|
+| 黑字 | 正常庫存數量 |
+| 藍字 | 此板為最後一板 |
+| 紅字 | 已回報庫存數量 |
+| 綠字 | 待重點數量 |
+| 黃字 | 系統無庫存 |
+| 紫字 | 系統無庫存 |
+| 黑字紫底 | 系統無庫存 |
+
+### ⚠️ 核心業務規則：物理棧板是最小移動單位
+
+**一個物理棧板永遠整體移動，不可拆分。**
+
+- 散板（紅/黃底，1個料號）→ 整板移動
+- 混合板（紅/黃底，多料號同框）→ 所有料號一起移動，不能只移其中一個
+- 完整板（白底）→ 整板移動
+
+這是之前 group split bug 的根本原因：程式把同框的多料號拆開各自移動，違反物理現實。
+修正方式：移動前強制所有同框料號共用同一個 PalletGroupId，寫回時畫同一個外框。
+
+### 物理棧板識別規則
+
+- 每個棧板佔 **2 列**：第1列 = 料號（SKU）＋箱數 / 第2列 = 批號＋片數
+- **粗體 SKU** = 新物理棧板的開始（同一棧板內多種料號，第一種是粗體）
+- 同一物理棧板的所有料號共用同一個 **PalletGroupId**，UI 畫同一個外框
+- 白底棧板通常一列（無批號行），彩色棧板固定兩列
+
+
+---
+
+## 2026-07-03 討論重點與開發規劃
+
+### 架構決策：為什麼從 GAS 改成 Node.js
+
+| | GAS（舊） | Node.js（現在） |
+|---|---|---|
+| 執行環境 | Google 伺服器 | 自己的 cPanel |
+| 本機測試 | 幾乎不可能 | `npm start` 直接跑 |
+| 部署 | `clasp push --force` | git push → 自動 deploy |
+| Timeout 限制 | 每次請求最多 30 秒 | 無限制 |
+| 移動 Bug 根源 | 格式藏語義，難 debug | 資料結構明確 |
+
+GAS 最大的問題：資料的「意義」藏在格式裡（粗體、顏色、外框），任何一個環節解讀錯，棧板就消失或亂跑。Node.js 改寫後結構明確，可本機測試。
+
+### 資料仍在 Google Sheets（目前）
+
+Node.js 透過 Google Sheets API 讀寫試算表，仍需網路連線。這是過渡期做法。
+
+### 未來方向：遷移到 MySQL
+
+Google Sheets 本來就不是倉庫系統，是沒有軟體時的暫時替代品。等功能穩定後：
+- 把 Sheets 資料一次搬進 MySQL（cPanel 主機已有）
+- Node.js 改讀 MySQL，速度快 10~50 倍，穩定不出錯
+- Google Sheets 退場，系統完全獨立
+
+### 三階段開發計畫
+
+**第一階段（現在）：功能確認**
+- 前端畫面正常顯示（區域、庫位、棧板）
+- 移動功能正確：整個物理棧板一起動，不分裂、不消失
+- 散板、混合板都測到
+
+**第二階段：切換正式表**
+- 把服務帳號加進正式試算表共用
+- 改一行 SHEET_ID 切換
+- 確認正式資料讀取正常
+
+**第三階段：MySQL 遷移**
+- 資料搬進 MySQL
+- 系統完全脫離 Google Sheets
+
+### 換電腦接手步驟
+
+```bash
+# 1. 拉程式碼
+git clone https://github.com/titankou2002/warehouse.git
+cd warehouse
+git checkout rewrite/nodejs
+npm install
+
+# 2. 放兩個機密檔案（不在 GitHub 上）
+
+# .env（手動建，放在根目錄）
+SHEET_ID=1QR6xLZrdSUzhkCNwBhE5EUYpdv8GqkESfj3ELzNf59s
+PORT=3000
+
+# service-account.json（從 Downloads 複製）
+cp ~/Downloads/bigt-ai-test-make-f03556cfec17.json ./service-account.json
+
+# 3. 啟動
+npm start
+# 開瀏覽器 http://localhost:3000
+```
+
+### 目前未完成的事
+
+- [ ] 確認前端畫面正常顯示
+- [ ] 測試移動功能（寫回試算表）
+- [ ] 把今天的修改 commit 推上 GitHub
+- [ ] `updateWarehousePallet`（編輯棧板資料）尚未實作
+
