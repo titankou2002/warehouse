@@ -38,7 +38,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -p 21098 -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
           rsync -avz --delete \
             --exclude='.git' \
@@ -50,7 +50,7 @@ jobs:
             --exclude='CURRENT_PROGRESS.md' \
             --exclude='WAREHOUSE_PALLET_RULES.md' \
             --exclude='PROGRESS_0703.md' \
-            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            -e "ssh -i ~/.ssh/id_rsa -p 21098 -o StrictHostKeyChecking=no" \
             ./ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH"
 
       - name: Restart Node.js App
@@ -60,5 +60,5 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-            "$SSH_USER@$SSH_HOST" \
+            -p 21098 "$SSH_USER@$SSH_HOST" \
             "cd $DEPLOY_PATH && ~/.cpanel/caches/cloudlinux-alt-nodejs20/bin/npm install --omit=dev --ignore-scripts && passenger-config restart-app $DEPLOY_PATH || true"
