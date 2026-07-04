@@ -50,6 +50,18 @@ jobs:
             --exclude='./CURRENT_PROGRESS.md' \
             --exclude='./WAREHOUSE_PALLET_RULES.md' \
             --exclude='./PROGRESS_0703.md' \
+            --exclude='./index.html' \
+            --exclude='./index.css' \
+            --exclude='./app.js' \
+            --exclude='./index_gas.html' \
+            --exclude='./warehouse_*.html' \
+            --exclude='./DataCache.js' \
+            --exclude='./程式碼.js' \
+            --exclude='./*.xlsx' \
+            --exclude='./*.csv' \
+            --exclude='./parsed_inventory*.json' \
+            --exclude='./parsed_inventory*.csv' \
+            --exclude='./deploy.py' \
             ./
 
           cat /tmp/deploy.tar.gz | ssh -i ~/.ssh/id_rsa -p 21098 -o StrictHostKeyChecking=no \
