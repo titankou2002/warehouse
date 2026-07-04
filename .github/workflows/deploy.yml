@@ -43,6 +43,7 @@ jobs:
           tar czf /tmp/deploy.tar.gz \
             --exclude='./.git' \
             --exclude='./.github' \
+            --exclude='./node_modules' \
             --exclude='./.gitignore' \
             --exclude='./*.gs' \
             --exclude='./*.py' \
