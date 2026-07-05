@@ -19,7 +19,7 @@ dist/
 build/
 index_gas.html
 DataCache.js
-app.js
+/app.js
 parsed_inventory.json
 parsed_inventory_enriched.json
 parsed_inventory.csv
