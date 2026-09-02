@@ -20,8 +20,11 @@ async function getSheetGrid(sheetName) {
   const values  = valRes.data.values || [];
   const rowData = fmtRes.data.sheets?.[0]?.data?.[0]?.rowData || [];
   const maxCols = values.reduce((m, r) => Math.max(m, r.length), 0);
+  // Sheets API values 可能因尾端空列被截短，以 rowData.length 為準
+  const numRows = Math.max(values.length, rowData.length);
 
-  return values.map((row, ri) => {
+  return Array.from({ length: numRows }, (_, ri) => {
+    const row = values[ri] || [];
     const fmtRow = rowData[ri]?.values || [];
     return Array.from({ length: maxCols }, (_, ci) => {
       const val = row[ci] ?? null;

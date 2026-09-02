@@ -36,9 +36,10 @@ const HANDLERS = {
     const fromSlot  = parts[1] || '';
     const fromDepth = Number(parts[2]) || 1;
     const sku       = parts[4] || '';
+    const batch     = parts[5] || '';
 
     const sheet = sourceSheet;
-    const result = await movePallet(sheet, fromSlot, fromDepth, Number(destDepth), sku);
+    const result = await movePallet(sheet, fromSlot, fromDepth, Number(destDepth), sku, batch);
 
     const entry = { type: 'movePallet', operator, sourceSheet, destSheet: destSheet || sourceSheet,
                     fromSlot, fromDepth, destSlot, destDepth: Number(destDepth), sku, ts: Date.now() };

@@ -40,12 +40,15 @@ async function writeColoredDepthPallets(sheetName, prodCol, qtyCol, range, palle
 
     if (nextRow + 1 > range.endRow) break;
     const bold = isNew;
+    // SKU 行：寫值 + 背景色 + 字體色 + bold
     valueData.push({ range: cellRange(sheetName, nextRow,   prodCol), values: [[p.sku]]      });
     valueData.push({ range: cellRange(sheetName, nextRow,   qtyCol),  values: [[p.boxQty]]   });
-    valueData.push({ range: cellRange(sheetName, nextRow+1, prodCol), values: [[p.batch]]     });
-    valueData.push({ range: cellRange(sheetName, nextRow+1, qtyCol),  values: [[p.pieceQty]] });
     fmtReqs.push(bgColorRequest(sheetId, nextRow,   prodCol, 2, 2, bg));
     fmtReqs.push(fontRequest(sheetId, nextRow,   prodCol, 1, 2, bold, fg));
+    // 批號行：寫值 + 背景色（同色塊）+ 字體色
+    valueData.push({ range: cellRange(sheetName, nextRow+1, prodCol), values: [[p.batch]]     });
+    valueData.push({ range: cellRange(sheetName, nextRow+1, qtyCol),  values: [[p.pieceQty]] });
+    fmtReqs.push(bgColorRequest(sheetId, nextRow+1, prodCol, 2, 2, bg));
     fmtReqs.push(fontRequest(sheetId, nextRow+1, prodCol, 1, 2, false, fg));
     nextRow += 2;
   }

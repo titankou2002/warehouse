@@ -12,20 +12,28 @@ function compareSlotLike(a, b) {
 }
 
 // 找某個 sheet 的所有 slotId（header 列掃描）
+// 對齊 GAS 邏輯：只排除 '數量' 欄位（不使用 substring match 避免誤殺含「數」「量」字的 slotId）
 function findAllSlots(grid) {
   const header = grid[0] || [];
   const slots = [];
   for (let c = 0; c < header.length; c++) {
     const v = cleanValue(header[c]?.value);
-    if (v && !v.includes('排') && !v.includes('數') && !v.includes('量')) {
+    if (v && v !== '數量') {
       slots.push({ slotId: v, prodCol: c });
     }
   }
   return slots;
 }
 
-// 把 depthSection pallet 轉成 GAS row 格式
+// 把 depthSection pallet 轉成 GAS row 格式（對齊 parseWarehouseGrid 輸出）
 function toGasRow(p, sheetName, slotId, depth, level) {
+  const bgColor = p.bgColor || 'WHITE';
+  const fontColor = p.fontColor || 'BLACK';
+  // Status: 對齊 GAS — GREEN = 專案庫存，其餘 = 混板/散板
+  const status = bgColor === 'GREEN' ? '專案庫存' : '混板/散板';
+  // IsLastPallet: 非 GREEN 且字體色為 BLUE = 最後一板
+  const isLastPallet = bgColor !== 'GREEN' && fontColor === 'BLUE';
+
   return {
     Sheet: sheetName,
     Slot: slotId,
@@ -37,11 +45,15 @@ function toGasRow(p, sheetName, slotId, depth, level) {
     Batch: p.batch || '無批號',
     BoxQty: p.boxQty || 0,
     PieceQty: p.pieceQty || 0,
-    BgColor: p.bgColor || 'WHITE',
-    FontColor: p.fontColor || 'BLACK',
+    BoxQtyFontColor: p.BoxQtyFontColor || 'BLACK',
+    PieceQtyFontColor: p.PieceQtyFontColor || 'BLACK',
+    BgColor: bgColor,
+    FontColor: fontColor,
+    Status: status,
+    IsLastPallet: isLastPallet,
     PalletGroupId: p.PalletGroupId,
     PalletKey: [sheetName, slotId, depth, level, p.sku, p.batch || ''].join('||'),
-    Status: p.bgColor === 'GREEN' ? '專案庫存' : '正常庫存',
+    Remarks: '',
   };
 }
 

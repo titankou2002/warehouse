@@ -7,7 +7,8 @@ const { findSlotProdCol, findDepthRowRange } = require('../utils/gridUtils');
 const mutex = new Mutex();
 
 // 移動單一棧板（白色格式用）
-async function movePallet(sheetName, slotId, fromDepth, toDepth, sku) {
+// sku 與 batch 均來自 palletKey，batch 為空字串時 fallback 到 SKU-only match
+async function movePallet(sheetName, slotId, fromDepth, toDepth, sku, batch) {
   return mutex.runExclusive(async () => {
     const grid     = await getSheetGrid(sheetName);
     const prodCol  = findSlotProdCol(grid, slotId);
@@ -22,8 +23,17 @@ async function movePallet(sheetName, slotId, fromDepth, toDepth, sku) {
     const { pallets: fromPallets } = readDepthSection(grid, prodCol, qtyCol, fromRange);
     const { pallets: toPallets   } = readDepthSection(grid, prodCol, qtyCol, toRange);
 
-    const idx = fromPallets.findIndex(p => p.sku === String(sku).trim());
-    if (idx < 0) throw new Error(`在第${fromDepth}排找不到 ${sku}`);
+    // 優先以 SKU + Batch 精確匹配；若無 batch 則 fallback 到 SKU-only
+    const cleanSku = String(sku).trim();
+    const cleanBatch = batch ? String(batch).trim() : '';
+    let idx = fromPallets.findIndex(p =>
+      p.sku === cleanSku && (!cleanBatch || p.batch === cleanBatch)
+    );
+    // fallback: 只比 SKU（白色格式無 batch）
+    if (idx < 0 && !cleanBatch) {
+      idx = fromPallets.findIndex(p => p.sku === cleanSku);
+    }
+    if (idx < 0) throw new Error(`在第${fromDepth}排找不到 ${sku}${cleanBatch ? ' ' + cleanBatch : ''}`);
 
     const [moved] = fromPallets.splice(idx, 1);
     toPallets.push(moved);
