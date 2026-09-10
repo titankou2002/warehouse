@@ -61,17 +61,35 @@ function readDepthSection(grid, prodCol, qtyCol, range) {
 
     if (val && val.includes('排') && val.includes('第')) { r++; continue; }
 
-    // 白色單列（混在彩色段裡）：1 列 = 1 板，不消耗下一列
+    // 白色列（混在彩色段裡）：若為 SKU 且下一列為批號則成對，否則單列
     if (bg === 'WHITE') {
-      if (val !== null) {
+      if (val !== null && !(val.includes('排') && val.includes('第'))) {
+        const nextR = r + 1;
+        let hasBatch = false;
+        if (nextR <= range.endRow) {
+          const nextCell = grid[nextR]?.[prodCol];
+          const nextVal = cleanValue(nextCell?.value);
+          const nextBg = identifyBgColor(nextCell?.bgColor);
+          if (nextBg === 'WHITE' && nextVal && !(nextVal.includes('排') && nextVal.includes('第'))) {
+            hasBatch = true;
+          }
+        }
         const boxQty = parseFloat(cleanValue(grid[r]?.[qtyCol]?.value)) || 0;
+        const pieceQty = hasBatch ? (parseFloat(cleanValue(grid[nextR]?.[qtyCol]?.value)) || 0) : 0;
+        const batchStr = hasBatch ? (cleanValue(grid[nextR]?.[prodCol]?.value) || '無批號') : '無批號';
         const boxFc = identifyFontColor(grid[r]?.[qtyCol]?.fontColor);
+        const pieceFc = hasBatch ? identifyFontColor(grid[nextR]?.[qtyCol]?.fontColor) : 'BLACK';
+        const rows = hasBatch ? [r, nextR] : [r];
+
         pallets.push({
-          rows: [r], sku: val, batch: '無批號', boxQty, pieceQty: 0,
+          rows: rows, sku: val, batch: batchStr, boxQty, pieceQty,
           bgColor: 'WHITE', fontColor: 'BLACK', format: 'white',
           PalletGroupId: `wht_${r}`,
-          BoxQtyFontColor: boxFc, PieceQtyFontColor: 'BLACK',
+          BoxQtyFontColor: boxFc, PieceQtyFontColor: pieceFc,
         });
+        r = hasBatch ? nextR + 1 : r + 1;
+        currentGroupId = null;
+        continue;
       }
       currentGroupId = null;
       r++; continue;

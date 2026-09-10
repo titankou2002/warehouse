@@ -715,12 +715,69 @@
   .operator-input { background: #0d1929; border: 1px solid #1e2e44; border-radius: 6px; color: #e5eefb; font-size: 12px; padding: 3px 8px; width: 120px; outline: none; }
   .operator-input:focus { border-color: #49d17d; }
   .operator-input.warn { border-color: #ffb347; }
-  .cache-info { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .cache-info { font-size: 12px; font-weight: 700; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
   .cache-info.ok { color: var(--good); }
-  .cache-info.loading { color: var(--blue); }
+  .cache-info.loading { color: var(--blue); display: inline-flex; align-items: center; gap: 6px; }
+  .cache-info.loading::before {
+    content: '';
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid rgba(104, 168, 255, 0.25);
+    border-top-color: #68a8ff;
+    border-radius: 50%;
+    animation: spin .75s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-grid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 40px 0; color: var(--muted); font-size: 13px; }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
   .cache-info.bad { color: var(--bad); }
   .cache-info.settled { color: var(--muted); }
-  .cache-refresh { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; color: var(--muted); line-height: 1; }
+  .cache-refresh { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; color: var(--muted); line-height: 1; display: inline-block; transition: transform 0.2s ease; }
+  .cache-refresh.spinning { animation: spin 1s linear infinite; pointer-events: none; opacity: 0.85; }
+
+  /* loading overlay on grid panel */
+  .overview-panel { position: relative; }
+  .grid-loading-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(7, 16, 29, 0.85);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 22px;
+    transition: opacity 0.2s ease;
+  }
+  .grid-loading-overlay.hidden { display: none; }
+  .spinner-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 24px 32px;
+    background: rgba(15, 23, 40, 0.95);
+    border: 1px solid rgba(104, 168, 255, 0.25);
+    border-radius: 20px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+  }
+  .spinner-ring {
+    width: 38px;
+    height: 38px;
+    border: 3px solid rgba(104, 168, 255, 0.2);
+    border-top-color: #68a8ff;
+    border-right-color: #49d17d;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .spinner-text {
+    font-size: 14px;
+    font-weight: 700;
+    color: #eef4ff;
+    letter-spacing: 0.04em;
+  }
   .undo-redo-wrap { display: flex; gap: 4px; }
   .undo-btn, .redo-btn {
     background: rgba(255,255,255,.07);
@@ -1056,6 +1113,12 @@
           <div class="zoom-controls">
             <button class="ghost-btn zoom-btn" onclick="zoomOut()">－</button>
             <button class="ghost-btn zoom-btn" onclick="zoomIn()">＋</button>
+          </div>
+        </div>
+        <div id="gridLoadingOverlay" class="grid-loading-overlay hidden">
+          <div class="spinner-box">
+            <div class="spinner-ring"></div>
+            <div id="gridLoadingText" class="spinner-text">資料載入中，請稍候...</div>
           </div>
         </div>
         <div id="overviewTableWrap" class="overview-scroll"></div>
@@ -1476,10 +1539,15 @@
 
     var p = state.movePending;
     var src = state.movingRow;
+    var destSheet = state.moveDestSheet || state.activeSheet;
+    markWriteTime_(src.Sheet);
+    markWriteTime_(destSheet);
+    markWriteTime_(state.activeSheet);
     state.saving = true;
+    setStatus('正在寫入試算表…', 'loading');
+    showGridLoading('正在移動棧板並寫回試算表...');
     try {
       var isGroupMove = state.movingGroupKeys.length > 1;
-      var destSheet = state.moveDestSheet || state.activeSheet;
       var operator = getOperator();
       var result = await gas(isGroupMove ? 'movePalletGroup' : 'movePallet',
         isGroupMove ? {
@@ -1500,15 +1568,15 @@
           operator:    operator
         });
 
-      // ── 成功：先清狀態再 render，只 render 一次，避免舊畫面閃現 ──
+      // ── 成功：先清狀態再 render，退出移動模式回到正常視圖 ──
       markWriteTime_(src.Sheet);
       markWriteTime_(state.activeSheet);
       // 1. 關 overlay
       $('moveConfirmOverlay').classList.add('hidden');
       state.movePending = null;
-      // 2. 重置按鈕（以備下次使用）
+      // 2. 重置按鈕
       if (btn) { btn.disabled = false; btn.textContent = '確認移動'; btn.classList.remove('btn-loading', 'btn-retry'); }
-      // 3. 清移動模式（不呼叫 renderDetailPanel）
+      // 3. 徹底退出移動模式（回到第二張圖的正常檢視模式）
       state.movingKey   = '';
       state.movingRow   = null;
       state.movingGroupId   = '';
@@ -1517,24 +1585,32 @@
       state.moveDestDepth = 0;
       _destroyGhost();
       closeMoveSlotPicker();
-      // 4. 更新 zone view + history，render 一次
+      // 4. 更新 zone view + history
       if (result.history) applyHistory_(result.history);
-      // 快取兩邊的 zone view
       if (result.sourceZoneView) {
         cacheSet('zone_' + result.sourceZoneView.sheet, result.sourceZoneView);
       }
       if (result.destZoneView) {
         cacheSet('zone_' + result.destZoneView.sheet, result.destZoneView);
       }
-      var zv = result.zoneView || result.sourceZoneView;
+      var zv = result.zoneView || result.sourceZoneView || (result.slots ? result : null);
       if (zv) {
         cacheSet('zone_' + zv.sheet, zv);
         state.activeZoneView = zv;
       }
-      // 焦點停在來源格子／排，讓使用者確認板子確實移走了
-      // （不跳到目的地，使用者可自行點 undo 或用搜尋找到目的地）
-      state.activeSlot  = src.Slot  ? String(src.Slot)  : state.activeSlot;
-      state.activeDepth = src.Depth ? Number(src.Depth) : state.activeDepth;
+      cacheRemove('search');
+      // 5. 焦點自動指向目的地格位與排次，並啟動 10 秒閃爍高亮
+      if (p.destSlot) state.activeSlot = String(p.destSlot);
+      if (p.destDepth) state.activeDepth = Number(p.destDepth);
+      var movedKey = [destSheet, p.destSlot, p.destDepth, p.destLevel, src.SKU, src.Batch].join('||');
+      state.recentlyMovedKey = movedKey;
+      if (state._recentlyMovedTimer) clearTimeout(state._recentlyMovedTimer);
+      state._recentlyMovedTimer = setTimeout(function() {
+        state.recentlyMovedKey = '';
+        renderOverviewTable();
+        renderDetailPanel();
+      }, 10000);
+
       var _scrollX = window.scrollX, _scrollY = window.scrollY;
       renderOverviewTable();
       renderDetailPanel();
@@ -1551,6 +1627,7 @@
       setStatus('移動失敗：' + msg, 'err');
     } finally {
       state.saving = false;
+      hideGridLoading();
     }
   }
   // ===== 還原 / 重做 =====
@@ -1591,7 +1668,8 @@
     _historyBusy = 'undo';
     renderUndoRedo();
     renderDetailPanel();
-    setStatus('還原中…', '');
+    setStatus('還原中…', 'loading');
+    showGridLoading('正在還原移動...');
     try {
       var result = await gas('undoLastMove');
       applyMoveResult_(result);
@@ -1611,6 +1689,7 @@
     } finally {
       state.saving = false;
       _historyBusy = '';
+      hideGridLoading();
       renderUndoRedo();
       renderDetailPanel();
     }
@@ -1622,7 +1701,8 @@
     _historyBusy = 'redo';
     renderUndoRedo();
     renderDetailPanel();
-    setStatus('重做中…', '');
+    setStatus('重做中…', 'loading');
+    showGridLoading('正在重做移動...');
     try {
       var result = await gas('redoLastMove');
       applyMoveResult_(result);
@@ -1639,6 +1719,7 @@
     } finally {
       state.saving = false;
       _historyBusy = '';
+      hideGridLoading();
       renderUndoRedo();
       renderDetailPanel();
     }
@@ -1737,13 +1818,37 @@
     return String(v == null ? "" : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   }
 
+  function showGridLoading(text) {
+    const overlay = $("gridLoadingOverlay");
+    const txt = $("gridLoadingText");
+    if (txt && text) txt.textContent = text;
+    if (overlay) overlay.classList.remove("hidden");
+  }
+
+  function hideGridLoading() {
+    const overlay = $("gridLoadingOverlay");
+    if (overlay) overlay.classList.add("hidden");
+  }
+
   let _statusTimer = null;
   function setStatus(msg, cls) {
     const el = $("cacheInfo");
+    const btn = document.querySelector(".cache-refresh");
     if (!el) return;
     clearTimeout(_statusTimer);
     el.textContent = msg;
-    el.className = 'cache-info ' + (cls || 'loading');
+    const isLoading = cls === 'loading' || (!cls && msg && (msg.includes('...') || msg.includes('…') || msg.includes('載入') || msg.includes('讀取') || msg.includes('同步') || msg.includes('連線') || msg.includes('寫回') || msg.includes('移動') || msg.includes('更新') || msg.includes('還原') || msg.includes('重做')));
+    
+    el.className = 'cache-info ' + (cls || (isLoading ? 'loading' : ''));
+
+    if (btn) {
+      if (isLoading) {
+        btn.classList.add('spinning');
+      } else {
+        btn.classList.remove('spinning');
+      }
+    }
+
     if (cls === 'ok') {
       _statusTimer = setTimeout(() => { el.classList.add('settled'); }, 3000);
     }
@@ -1765,12 +1870,13 @@
   }
 
   function fail(err) {
+    hideGridLoading();
     const msg = (err && (err.stack || err.message)) || String(err);
     setStatus("載入失敗：\n" + msg, "bad");
   }
 
   function gas(method, ...args) {
-    const timeoutMs = method === 'movePalletGroup' ? 90000 : method === 'movePallet' ? 60000 : method === "updateWarehousePallet" ? 30000 : 20000;
+    const timeoutMs = method === 'movePalletGroup' ? 90000 : method === 'movePallet' ? 60000 : method === "updateWarehousePallet" ? 30000 : method === 'getInventorySheetList' ? 60000 : method === 'getWarehouseZoneView' ? 60000 : 20000;
     return new Promise(async (resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(method + " timeout after " + Math.round(timeoutMs/1000) + "s")), timeoutMs);
       try {
@@ -1922,6 +2028,7 @@
 
   async function boot() {
     try {
+      showGridLoading("連線中，讀取區域清單...");
       initOperator();
       const d = new Date();
       const ver = 'V' + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
@@ -1930,9 +2037,9 @@
       let sheets = cacheGet('sheets');
       if (sheets) {
         state.sheets = sheets;
-        setStatus("快取中…");
+        setStatus("讀取區域資料…", "loading");
       } else {
-        setStatus("讀取區域清單...");
+        setStatus("讀取區域清單...", "loading");
         sheets = await gas("getInventorySheetList");
         state.sheets = sheets;
         cacheSet('sheets', sheets);
@@ -1950,6 +2057,7 @@
       // 背景預熱其他區域（延遲 3 秒，讓主區先穩定）
       setTimeout(_preloadAllZones, 3000);
     } catch (err) {
+      hideGridLoading();
       fail(err);
     }
   }
@@ -1991,6 +2099,7 @@
       renderOverviewTable();
       renderDetailPanel();
       renderSearch();
+      hideGridLoading();
 
       if (ageMs < CACHE_FRESH_MS) {
         setStatus('快取 ' + (cacheTime('zone_' + sheetName) || ''), 'ok');
@@ -2002,29 +2111,35 @@
     }
 
     // ── 無快取：前景載入 ──
-    setStatus("載入 " + sheetName + "...");
-    zoneView = await gas("getWarehouseZoneView", sheetName);
-    cacheSet('zone_' + sheetName, zoneView);
-    const t = cacheTime('zone_' + sheetName);
-    setStatus("已更新 " + (t || ''), "ok");
+    showGridLoading("載入 " + sheetName + " 資料中...");
+    setStatus("載入 " + sheetName + "...", "loading");
+    try {
+      zoneView = await gas("getWarehouseZoneView", sheetName);
+      cacheSet('zone_' + sheetName, zoneView);
+      const t = cacheTime('zone_' + sheetName);
+      setStatus("已更新 " + (t || ''), "ok");
 
-    state.activeZoneView = zoneView;
-    state.activeSlot = preferredSlot || "";
-    state.activeDepth = Number(preferredDepth || 0);
-    state.activePalletKey = preferredPalletKey || "";
-    state.activeItemKey = preferredPalletKey || "";
-    renderOverviewTable();
-    renderDetailPanel();
-    renderSearch();
+      state.activeZoneView = zoneView;
+      state.activeSlot = preferredSlot || "";
+      state.activeDepth = Number(preferredDepth || 0);
+      state.activePalletKey = preferredPalletKey || "";
+      state.activeItemKey = preferredPalletKey || "";
+      renderOverviewTable();
+      renderDetailPanel();
+      renderSearch();
+    } finally {
+      hideGridLoading();
+    }
   }
 
   async function forceRefresh() {
+    showGridLoading("重新讀取倉儲資料...");
+    setStatus("清除快取，重新讀取...", "loading");
     cacheClear();
     state.sheets = [];
     state.activeZoneView = null;
     state.searchRows = [];
     state.searchReady = false;
-    setStatus("清除快取，重新讀取...");
     await boot();
   }
 
@@ -2587,12 +2702,17 @@
     $("editMeta").textContent = [row.Sheet, '格 ' + row.Slot, row.DepthLabel || row.Stack, '第 ' + row.Level + ' 層'].join(' / ');
     $("editSku").value = row.SKU || '';
     $("editBatch").value = row.Batch || '';
+    if ($("editBrand")) $("editBrand").value = detailValue(row.Brand);
+    if ($("editSeries")) $("editSeries").value = detailValue(row.Series || row.ChineseSeries);
+    if ($("editOriginalName")) $("editOriginalName").value = detailValue(row.OriginalName);
+    if ($("editSize")) $("editSize").value = detailValue(row.Size);
     $("editBoxes").value = Number(row.BoxQty || 0);
     $("editPieces").value = Number(row.PieceQty || 0);
     $("editStatus").value = row.IsLastPallet ? '最後一板' : (row.Status || '正常庫存');
     var pzHint = $("editPzHint");
     if (pzHint) pzHint.textContent = row.PiecesPerBox ? '(' + row.PiecesPerBox + '片/箱)' : '';
     $("editModal").classList.remove("hidden");
+    document.body.style.overflow = 'hidden';
     renderDetailPanel();
   }
 
@@ -2600,6 +2720,7 @@
     if (state.saving) return;
     state.editingRow = null;
     $("editModal").classList.add("hidden");
+    document.body.style.overflow = '';
   }
 
   async function saveEdit() {
@@ -2619,7 +2740,8 @@
     }
 
     state.saving = true;
-    setStatus('正在寫回 ' + oldData.Sheet + ' / 格 ' + oldData.Slot + ' / ' + (oldData.DepthLabel || oldData.Stack) + ' / 第 ' + oldData.Level + ' 層...');
+    setStatus('正在寫回 ' + oldData.Sheet + ' / 格 ' + oldData.Slot + ' / ' + (oldData.DepthLabel || oldData.Stack) + ' / 第 ' + oldData.Level + ' 層...', 'loading');
+    showGridLoading('正在更新棧板資料...');
     try {
       const result = await gas("updateWarehousePallet", { oldData, newData, operator: getOperator() });
       markWriteTime_(oldData.Sheet);
@@ -2633,6 +2755,7 @@
       fail(err);
     } finally {
       state.saving = false;
+      hideGridLoading();
     }
   }
 
@@ -2645,7 +2768,8 @@
     const newBoxQty = boxInput ? Number(boxInput.value) : Number(row.BoxQty || 0);
     const newPieceQty = pieceInput ? Number(pieceInput.value) : Number(row.PieceQty || 0);
     state.saving = true;
-    setStatus('正在寫回 ' + row.Sheet + ' ' + row.Slot + ' L' + row.Level + '...');
+    setStatus('正在寫回 ' + row.Sheet + ' ' + row.Slot + ' L' + row.Level + '...', 'loading');
+    showGridLoading('正在更新棧板數量...');
     try {
       const result = await gas("updateWarehousePallet", {
         oldData: row,
@@ -2669,6 +2793,7 @@
       fail(err);
     } finally {
       state.saving = false;
+      hideGridLoading();
     }
   }
 

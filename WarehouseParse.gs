@@ -48,6 +48,30 @@ function cleanValue(val) {
   return valStr;
 }
 
+/**
+ * 判斷值是否為「有效資料行」（可參與編號/批號配對）
+ * 回傳 true：值含有半形英數字元（排除純中文備註、空值、排標題）
+ */
+function isDataValue_(val) {
+  if (!val) return false;
+  return /[\x21-\x7E]/.test(val);
+}
+
+/**
+ * 判斷一個值是否為編號（SKU）
+ * 1. 先查 SKU Set（目錄裡的已知編號）
+ * 2. 再比對格式：2個大寫字母 + 4位以上數字（如 RP12004, LV12001）
+ *    排除：純數字（漢樺編號已在 Set 裡）、短代碼如 TA4/GC4/AA6
+ */
+function isSkuValue_(val, skuSet) {
+  if (!val) return false;
+  var upper = String(val).trim().toUpperCase();
+  if (skuSet[upper] === true) return true;
+  // 格式 fallback：開頭 2個大寫字母 + 至少4位數字（後方可有 -S/-A 等後綴）
+  if (/^[A-Z]{2}\d{4,}/.test(upper)) return true;
+  return false;
+}
+
 function compareSlotLikeText_(a, b) {
   var na = Number(a);
   var nb = Number(b);
@@ -145,6 +169,46 @@ function getSheetDataWithMergedResolved(sheet) {
   return grid;
 }
 
+function _emitPallet_(pallets, o) {
+  var skuVal = o.skuRow !== null ? (cleanValue(o.grid[o.skuRow][o.prodCol].value) || '') : '';
+  var batchVal = o.batchRow !== null ? (cleanValue(o.grid[o.batchRow][o.prodCol].value) || '') : '無批號';
+  if (!skuVal && !o.batchRow) return;
+  if (!skuVal) skuVal = '';
+  o.levelByDepth[o.depth] = (o.levelByDepth[o.depth] || 0) + 1;
+  var pallet = {
+    Sheet: o.sheetName, Slot: o.slotId, Stack: o.stack,
+    Depth: o.depth, DepthLabel: depthLabel_(o.depth), Level: o.levelByDepth[o.depth],
+    SKU: skuVal, Batch: batchVal,
+    BoxQty: (function(){
+      var b = o.skuRow !== null ? (parseFloat(cleanValue(o.grid[o.skuRow][o.qtyCol] ? o.grid[o.skuRow][o.qtyCol].value : null)) || 0) : 0;
+      var p = o.batchRow !== null ? (parseFloat(cleanValue(o.grid[o.batchRow][o.qtyCol] ? o.grid[o.batchRow][o.qtyCol].value : null)) || 0) : 0;
+      // 實務：編號列數量空白、批號列有數字 → 該數字是箱數不是片數
+      if (b === 0 && p > 0) return p;
+      return b;
+    })(),
+    PieceQty: (function(){
+      var b = o.skuRow !== null ? (parseFloat(cleanValue(o.grid[o.skuRow][o.qtyCol] ? o.grid[o.skuRow][o.qtyCol].value : null)) || 0) : 0;
+      var p = o.batchRow !== null ? (parseFloat(cleanValue(o.grid[o.batchRow][o.qtyCol] ? o.grid[o.batchRow][o.qtyCol].value : null)) || 0) : 0;
+      if (b === 0 && p > 0) return 0;
+      return p;
+    })(),
+    BoxQtyFontColor: (o.qtyCol < o.numCols && o.skuRow !== null) ? identifyFontColor(o.grid[o.skuRow][o.qtyCol].fontColor) : 'BLACK',
+    PieceQtyFontColor: (o.qtyCol < o.numCols && o.batchRow !== null) ? identifyFontColor(o.grid[o.batchRow][o.qtyCol].fontColor) : 'BLACK',
+    QtyOnBatchRow: (function(){
+      var b = o.skuRow !== null ? (parseFloat(cleanValue(o.grid[o.skuRow][o.qtyCol] ? o.grid[o.skuRow][o.qtyCol].value : null)) || 0) : 0;
+      var p = o.batchRow !== null ? (parseFloat(cleanValue(o.grid[o.batchRow][o.qtyCol] ? o.grid[o.batchRow][o.qtyCol].value : null)) || 0) : 0;
+      return (b === 0 && p > 0);
+    })(),
+    BgColor: o.bgColor,
+    FontColor: (o.skuRow !== null) ? identifyFontColor(o.grid[o.skuRow][o.prodCol].fontColor) : 'BLACK',
+    Status: (o.bgColor === 'GREEN') ? '專案庫存' : '混板/散板',
+    IsLastPallet: (o.bgColor !== 'GREEN') && (o.skuRow !== null) && (identifyFontColor(o.grid[o.skuRow][o.prodCol].fontColor) === 'BLUE'),
+    PalletGroupId: o.groupId, Remarks: ''
+  };
+  pallet.PalletKey = makePalletKey_(pallet);
+  pallets.push(pallet);
+}
+
 function parseWarehouseGrid(grid, sheetName) {
   if (!grid || !grid.length || !grid[0] || !grid[0].length) return [];
 
@@ -158,6 +222,9 @@ function parseWarehouseGrid(grid, sheetName) {
     }
   }
 
+  // 從產品目錄建 SKU Set — 在 Set 裡的就是編號行，不在的就是批號行
+  var skuSet = buildSkuSet_();
+
   var pallets = [];
   for (var pairIdx = 0; pairIdx < colPairs.length; pairIdx++) {
     var prodCol = colPairs[pairIdx].prodCol;
@@ -167,6 +234,7 @@ function parseWarehouseGrid(grid, sheetName) {
     var currentDepth = 0;
     var levelByDepth = {};
     var groupSeqByDepth = {};
+    var pendingSkuRow = null;
     var r = 1;
 
     while (r < numRows) {
@@ -178,129 +246,127 @@ function parseWarehouseGrid(grid, sheetName) {
         currentStack = valProd;
         currentDepth = parseStackDepth_(valProd);
         if (!levelByDepth[currentDepth]) levelByDepth[currentDepth] = 0;
-        // 預掃整個排段，判斷是否為「bold 標記新格式」，避免逐列向前掃描在
-        // 區段尾端找不到後續 bold 而誤判（導致同一物理棧板的第二品號被當成新棧板）
-        var sectionHasBold = false;
-        for (var pre = r + 1; pre < numRows; pre++) {
-          var preCell = grid[pre][prodCol];
-          var preVal = cleanValue(preCell.value);
-          if (preVal && preVal.indexOf('排') !== -1) break;
-          if (preCell && preCell.fontWeight === 'bold' && identifyBgColor(preCell.bgColor) !== 'WHITE') { sectionHasBold = true; break; }
-        }
-        groupSeqByDepth[currentDepth + '_hasBold'] = sectionHasBold;
+        pendingSkuRow = null;
         r++; continue;
       }
       if (valProd === null) { r++; continue; }
-      // 尚未遇到排標題但已有彩色格子（通常是 destDepth=0 寫壞的孤立板）
-      // 自動補 depth=1 讓它們可以被撈回，不要直接丟掉
       if (currentStack === null) {
         var orphanBg = identifyBgColor(cellProd.bgColor);
         if (orphanBg !== 'WHITE') {
           currentStack = '（復原中）';
           currentDepth = 1;
           if (!levelByDepth[currentDepth]) levelByDepth[currentDepth] = 0;
-          continue; // 不 r++，重新進入迴圈，此時 currentStack 已不是 null
+          continue;
         }
         r++; continue;
       }
 
-      // 分隔行偵測：背景 = PALLET_SEP_BG_ → 新棧板邊界，跳過並重設 group seq
+      // 分隔行偵測
       var rawBg = String(cellProd.bgColor || '').toUpperCase().replace('#','');
-      var isSepRow = (rawBg === '1A3A6A' && valProd === null);
-      if (isSepRow) {
-        // 下一個彩色格子開始時視為新棧板（groupSeqByDepth 不在這裡加，讓後面的 groupSeqByDepth++ 處理）
-        r++; continue;
-      }
+      if (rawBg === '1A3A6A' && valProd === null) { r++; continue; }
 
       var bgColor = identifyBgColor(cellProd.bgColor);
 
       // ── 彩色格式 ──────────────────────────────────────────────
-      // 物理棧板邊界優先用「SKU 行 bold」偵測（新格式）
-      // 若無 bold 標記（舊資料），fallback 到同色塊偵測
       if (bgColor !== 'WHITE') {
-        var isBoldStart = (cellProd.fontWeight === 'bold');
-        // 是否為「bold 標記新格式」：以整個排段預掃結果為準（見排標題列處理）
-        var usesBoldFormat = !!groupSeqByDepth[currentDepth + '_hasBold'];
-
+        var tempR = r;
         var blockRows = [];
-        if (usesBoldFormat) {
-          // 新格式：從當前 SKU 行讀 2 列（SKU + 批號），一次一板
-          blockRows = [r];
-          if (r + 1 < numRows && cleanValue(grid[r + 1][prodCol].value) !== null) blockRows.push(r + 1);
-        } else {
-          // 舊格式 fallback：收集整個同色塊
-          var tempR = r;
-          while (tempR < numRows) {
-            var tc = grid[tempR][prodCol];
-            var tcBg  = identifyBgColor(tc.bgColor);
-            var tcVal = cleanValue(tc.value);
-            if (tcBg === bgColor && tcVal !== null && !(tcVal && tcVal.indexOf('排') !== -1)) {
-              blockRows.push(tempR); tempR++;
-            } else break;
-          }
+        while (tempR < numRows) {
+          var tc = grid[tempR][prodCol];
+          var tcBg  = identifyBgColor(tc.bgColor);
+          var tcVal = cleanValue(tc.value);
+          if (tcBg === bgColor && tcVal !== null && !(tcVal && tcVal.indexOf('排') !== -1)) {
+            blockRows.push(tempR); tempR++;
+          } else break;
         }
 
-        // 每 2 列 = 1 品號，整個 blockRows = 同一個物理棧板，共用同一個 PalletGroupId
         if (!groupSeqByDepth[currentDepth]) groupSeqByDepth[currentDepth] = 0;
-        // 新格式：bold 行 = 新棧板；舊格式：每個色塊 = 新棧板
-        if (!usesBoldFormat || isBoldStart) groupSeqByDepth[currentDepth]++;
+        groupSeqByDepth[currentDepth]++;
         var groupId = [sheetName, slotId, currentDepth, groupSeqByDepth[currentDepth]].join('||');
 
-        var numPairs = Math.floor(blockRows.length / 2);
-        for (var pi = 0; pi < numPairs; pi++) {
-          var skuR   = blockRows[pi * 2];
-          var batchR = blockRows[pi * 2 + 1];
-          levelByDepth[currentDepth] = (levelByDepth[currentDepth] || 0) + 1;
-          var level = levelByDepth[currentDepth];
-          var sku   = cleanValue(grid[skuR][prodCol].value) || '';
-          var batch = cleanValue(grid[batchR][prodCol].value) || '無批號';
-          var boxQty   = parseFloat(cleanValue(grid[skuR][qtyCol]   ? grid[skuR][qtyCol].value   : null)) || 0;
-          var pieceQty = parseFloat(cleanValue(grid[batchR][qtyCol] ? grid[batchR][qtyCol].value : null)) || 0;
-          var boxQtyFc   = (qtyCol < numCols) ? identifyFontColor(grid[skuR][qtyCol].fontColor)   : 'BLACK';
-          var pieceQtyFc = (qtyCol < numCols) ? identifyFontColor(grid[batchR][qtyCol].fontColor) : 'BLACK';
-          var fontColor  = identifyFontColor(cellProd.fontColor);
-          var status = (bgColor === 'GREEN') ? '專案庫存' : '混板/散板';
-          var isLastPallet = (bgColor !== 'GREEN') && (fontColor === 'BLUE');
-          var pallet = {
-            Sheet: sheetName, Slot: slotId, Stack: currentStack,
-            Depth: currentDepth, DepthLabel: depthLabel_(currentDepth), Level: level,
-            SKU: sku, Batch: batch, BoxQty: boxQty, PieceQty: pieceQty,
-            BoxQtyFontColor: boxQtyFc, PieceQtyFontColor: pieceQtyFc,
-            BgColor: bgColor, FontColor: fontColor, Status: status, IsLastPallet: isLastPallet,
-            PalletGroupId: groupId,   // 同一物理棧板共用此 ID
-            Remarks: ''
-          };
-          pallet.PalletKey = makePalletKey_(pallet);
-          pallets.push(pallet);
+        for (var bi = 0; bi < blockRows.length; bi++) {
+          var bRow = blockRows[bi];
+          var val  = cleanValue(grid[bRow][prodCol].value) || '';
+          var isSku = isSkuValue_(val, skuSet);
+
+          if (isSku) {
+            if (pendingSkuRow !== null) {
+              _emitPallet_(pallets, {
+                sheetName: sheetName, slotId: slotId, stack: currentStack,
+                depth: currentDepth, levelByDepth: levelByDepth,
+                skuRow: pendingSkuRow, batchRow: null,
+                prodCol: prodCol, qtyCol: qtyCol, numCols: numCols,
+                bgColor: bgColor, groupId: groupId, grid: grid
+              });
+            }
+            pendingSkuRow = bRow;
+          } else {
+            if (pendingSkuRow !== null) {
+              _emitPallet_(pallets, {
+                sheetName: sheetName, slotId: slotId, stack: currentStack,
+                depth: currentDepth, levelByDepth: levelByDepth,
+                skuRow: pendingSkuRow, batchRow: bRow,
+                prodCol: prodCol, qtyCol: qtyCol, numCols: numCols,
+                bgColor: bgColor, groupId: groupId, grid: grid
+              });
+              pendingSkuRow = null;
+            } else if (pallets.length > 0 && pallets[pallets.length - 1].PalletGroupId === groupId) {
+              var lastP = pallets[pallets.length - 1];
+              if (val) {
+                lastP.Remarks = lastP.Remarks ? (lastP.Remarks + ' ' + val) : val;
+              }
+            }
+          }
         }
-        // 新格式：每次固定移動 blockRows.length（1~2 列）；舊格式：移到 tempR
-        r = usesBoldFormat ? (r + blockRows.length) : tempR;
+        r = tempR;
         continue;
       }
 
       // ── 白色格式 ──────────────────────────────────────────────
-      // 白色 = 1 行 = 1 板，不依賴 A 欄標籤
-      var palletRowsW = [r];
+      // 白底格式：若該列為 SKU，檢查下一列是否為批號列（非 SKU 且為有效資料列）
+      var valW = cleanValue(grid[r][prodCol].value) || '';
+      if (!isSkuValue_(valW, skuSet)) { r++; continue; }
+
+      var hasBatchRow = false;
+      var nextR = r + 1;
+      if (nextR < numRows) {
+        var nextCellProd = grid[nextR][prodCol];
+        var nextValProd  = cleanValue(nextCellProd ? nextCellProd.value : null);
+        var nextBg       = identifyBgColor(nextCellProd ? nextCellProd.bgColor : null);
+        var rawNextBg    = String(nextCellProd ? (nextCellProd.bgColor || '') : '').toUpperCase().replace('#','');
+
+        if (nextBg === 'WHITE' && rawNextBg !== '1A3A6A' && nextValProd !== null && nextValProd.indexOf('排') === -1 && isDataValue_(nextValProd) && !isSkuValue_(nextValProd, skuSet)) {
+          hasBatchRow = true;
+        }
+      }
+
+      var skuRowW   = r;
+      var batchRowW = hasBatchRow ? nextR : null;
+      var batchValW = hasBatchRow ? (cleanValue(grid[nextR][prodCol].value) || '無批號') : '無批號';
+      var boxQtyW   = parseFloat(cleanValue(grid[skuRowW][qtyCol] ? grid[skuRowW][qtyCol].value : null)) || 0;
+      var pieceQtyW = hasBatchRow ? (parseFloat(cleanValue(grid[nextR][qtyCol] ? grid[nextR][qtyCol].value : null)) || 0) : 0;
+      var qtyOnBatch = false;
+      if (boxQtyW === 0 && pieceQtyW > 0) { boxQtyW = pieceQtyW; pieceQtyW = 0; qtyOnBatch = true; }
+      var boxFcW    = (qtyCol < numCols) ? identifyFontColor(grid[skuRowW][qtyCol].fontColor) : 'BLACK';
+      var pieceFcW  = (qtyCol < numCols && hasBatchRow) ? identifyFontColor(grid[nextR][qtyCol].fontColor) : 'BLACK';
+      if (qtyOnBatch && hasBatchRow) boxFcW = pieceFcW;
+
       levelByDepth[currentDepth] = (levelByDepth[currentDepth] || 0) + 1;
       var levelW   = levelByDepth[currentDepth];
-      var skuW     = cleanValue(grid[palletRowsW[0]][prodCol].value) || '';
-      var batchW   = '無批號';
-      var boxQtyW  = parseFloat(cleanValue(grid[palletRowsW[0]][qtyCol] ? grid[palletRowsW[0]][qtyCol].value : null)) || 0;
-      var pieceQtyW = 0;
-      var boxFcW   = (qtyCol < numCols) ? identifyFontColor(grid[palletRowsW[0]][qtyCol].fontColor) : 'BLACK';
-      var pieceFcW = 'BLACK';
+
       var palletW = {
         Sheet: sheetName, Slot: slotId, Stack: currentStack,
         Depth: currentDepth, DepthLabel: depthLabel_(currentDepth), Level: levelW,
-        SKU: skuW, Batch: batchW, BoxQty: boxQtyW, PieceQty: pieceQtyW,
+        SKU: valW, Batch: batchValW, BoxQty: boxQtyW, PieceQty: pieceQtyW,
+        QtyOnBatchRow: qtyOnBatch,
         BoxQtyFontColor: boxFcW, PieceQtyFontColor: pieceFcW,
-        BgColor: 'WHITE', FontColor: 'BLACK', Status: '正常庫存', IsLastPallet: false,
+        BgColor: 'WHITE', FontColor: identifyFontColor(grid[skuRowW][prodCol].fontColor), Status: '正常庫存', IsLastPallet: false,
         Remarks: ''
       };
       palletW.PalletKey = makePalletKey_(palletW);
       palletW.PalletGroupId = palletW.PalletKey;
       pallets.push(palletW);
-      r += 1;
+      r = hasBatchRow ? nextR + 1 : r + 1;
     }
   }
 

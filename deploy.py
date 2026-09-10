@@ -26,7 +26,7 @@ def main():
     
     # 2. Push code
     print("\n--- 2. 上傳程式碼至 Apps Script ---")
-    push_res = subprocess.run(["npx", "clasp", "push"], capture_output=True, text=True)
+    push_res = subprocess.run(["npx", "clasp", "push", "-f"], capture_output=True, text=True)
     print(push_res.stdout)
     if push_res.returncode != 0:
         print("上傳失敗！")
@@ -61,8 +61,10 @@ def main():
         target_id = deployments[0]
         print(f"偵測到現有部署 ID: {target_id}")
         print("進行覆蓋更新 (不新增部署)...")
-        deploy_res = subprocess.run(["npx", "clasp", "deploy", "-i", target_id, "-d", "鈦傳速智慧倉儲管理系統 - 覆蓋更新"], capture_output=True, text=True)
+        deploy_res = subprocess.run(["npx", "clasp", "deploy", "-i", target_id], capture_output=True, text=True)
         print(deploy_res.stdout)
+        if deploy_res.returncode != 0:
+            print(deploy_res.stderr)
         if deploy_res.returncode == 0:
             print("\n✅ 覆蓋部署成功！")
             print(f"🔗 線上 Web App 網址 (維持不變):")

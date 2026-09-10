@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <?!= include_('warehouse_grid_ui_css'); ?>
+</head>
+<body>
+  <main class="app-shell">
+    <section class="app-panel">
+      <header class="hero">
+        <div class="hero-title-row">
+          <h1>永安倉</h1>
+          <div class="cache-row">
+            <span id="cacheInfo" class="cache-info loading">準備連線...</span>
+            <button class="cache-refresh" onclick="forceRefresh()" title="清除快取重新讀取">🔄</button>
+            <div id="undoRedoWrap" class="undo-redo-wrap" style="display:none"></div>
+          </div>
+        </div>
+      </header>
+
+      <section class="topbar">
+        <div class="search-dual">
+          <input id="searchSku" class="search" placeholder="搜尋編號 / SKU / 5碼" list="skuDatalist" autocomplete="off">
+          <datalist id="skuDatalist"></datalist>
+          <input id="searchBatch" class="search" placeholder="搜尋批號" list="batchDatalist" autocomplete="off">
+          <datalist id="batchDatalist"></datalist>
+        </div>
+        <div id="searchHint" class="search-hint"></div>
+        <div id="searchPickBar" class="search-pick-bar"></div>
+      </section>
+
+      <section id="searchWrap" class="search-wrap hidden">
+        <div class="search-title-sm">搜尋結果</div>
+        <div id="searchResults" class="search-results"></div>
+      </section>
+
+      <section class="zone-section">
+        <div class="zone-header-row">
+          <span class="section-title">區域</span>
+          <div id="whTabs" class="wh-tabs">
+            <button class="wh-tab-btn active" data-wh="ALL" onclick="selectWhTab('ALL')">全部</button>
+            <button class="wh-tab-btn" data-wh="A" onclick="selectWhTab('A')">A倉</button>
+            <button class="wh-tab-btn" data-wh="B" onclick="selectWhTab('B')">B倉</button>
+            <button class="wh-tab-btn" data-wh="C" onclick="selectWhTab('C')">C倉</button>
+          </div>
+        </div>
+        <div id="zoneChips" class="zone-chips"></div>
+      </section>
+
+      <section class="overview-panel">
+        <div class="overview-head">
+          <div class="overview-head-left">
+            <span class="section-title">俯視圖</span>
+            <div class="zoom-controls">
+              <button class="ghost-btn zoom-btn" onclick="zoomOut()">－</button>
+              <button class="ghost-btn zoom-btn" onclick="zoomIn()">＋</button>
+            </div>
+          </div>
+          <div id="minimapWrap" class="minimap-wrap" style="display:none!important" title="倉位預設圖（點擊或滑動定位）">
+            <div id="minimapSvg" class="minimap-svg-container"></div>
+          </div>
+        </div>
+        <div id="overviewTableWrap" class="overview-scroll"></div>
+      </section>
+
+      <section id="detailPanel" class="detail-panel hidden">
+        <button class="detail-close-x" onclick="closeDetail()" title="關閉">✕</button>
+        <div class="detail-header">
+          <div class="detail-header-left">
+            <div id="slotTitle" class="section-title">剖面圖</div>
+            <div id="slotMeta" class="section-subtitle">先從俯視圖點一個格子</div>
+          </div>
+          <div id="warehouseMapWrap" class="warehouse-map-wrap detail-map" style="display:none!important"></div>
+        </div>
+        <div id="cellItems" class="cell-items hidden" style="display:none"></div>
+        <div id="crossSection" class="cross-section"></div>
+        <div id="itemDetail" class="item-detail empty">點選剖面圖中的棧板卡片查看與編輯資料</div>
+      </section>
+    </section>
+  </main>
+
+  <div id="detailBackdrop" class="detail-backdrop hidden" onclick="closeDetail()"></div>
+
+  <div id="editModal" class="modal hidden" onclick="if(event.target===this)closeEdit(true);" ontouchend="if(event.target===this){event.preventDefault();closeEdit(true);}">
+    <div class="modal-card compact-card">
+      <button class="modal-close-x" onclick="closeEdit(true)" ontouchend="event.preventDefault();closeEdit(true)" type="button" title="關閉" aria-label="關閉">✕</button>
+      <div class="modal-head-sm">
+        <span class="modal-title-text">更新棧板資料</span>
+        <span id="editMeta" class="modal-subtitle-text">-</span>
+      </div>
+      <div id="editProductImg" class="edit-product-img" style="text-align:center;margin:0 0 8px"></div>
+      <div class="form-grid-compact">
+        <label>編號<input id="editSku"></label>
+        <label>批號<input id="editBatch"></label>
+        <label>品牌<input id="editBrand" readonly></label>
+        <label>系列<input id="editSeries" readonly></label>
+        <label>原文<input id="editOriginalName" readonly></label>
+        <label>尺寸<input id="editSize" readonly></label>
+        <div class="three-col-row">
+          <label>箱數<input id="editBoxes" type="number" inputmode="numeric" min="0" step="1"></label>
+          <label>片數<input id="editPieces" type="number" inputmode="numeric" min="0" step="1"></label>
+          <label>狀態<select id="editStatus"><option>正常庫存</option><option>混板/散板</option><option>專案庫存</option><option>最後一板</option></select></label>
+        </div>
+      </div>
+      <div class="action-bar-compact">
+        <button class="ghost-btn-sm" onclick="triggerMoveFromEdit()" type="button" style="margin-right:auto;background:#1b3252;border-color:#3b659c;color:#7ec0ff;">🚚 移動此板</button>
+        <button class="ghost-btn-sm" onclick="closeEdit(true)" ontouchend="event.preventDefault();closeEdit(true)" type="button">取消</button>
+        <button class="primary-btn-sm" onclick="saveEdit()" type="button">更新</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 選格子 overlay（換列用） -->
+  <div id="moveSlotOverlay" class="move-slot-overlay hidden">
+    <div class="move-slot-card">
+      <div class="modal-head">
+        <div>
+          <div class="section-title">選擇目標格子</div>
+          <div id="moveSlotMeta" class="section-subtitle">-</div>
+        </div>
+        <button class="ghost-btn" onclick="closeMoveSlotPicker()">取消</button>
+      </div>
+      <div id="moveZoneRow" class="move-zone-row"></div>
+      <div id="moveDepthPicker" class="move-depth-picker hidden"></div>
+      <div id="moveSlotList" class="move-slot-list"></div>
+    </div>
+  </div>
+
+  <!-- 移動確認 overlay -->
+  <div id="moveConfirmOverlay" class="move-confirm-overlay hidden">
+    <div class="move-confirm-card">
+      <div class="section-title">確認移動</div>
+      <div id="moveConfirmBody" class="move-confirm-body"></div>
+      <div class="action-bar">
+        <button class="ghost-btn" onclick="cancelMoveMode()">取消</button>
+        <button class="primary-btn" id="moveConfirmBtn" onclick="executeMove()">確認移動</button>
+      </div>
+    </div>
+  </div>
+
+  
+  <!-- 全螢幕讀取：fixed，捲到哪都看得到 -->
+  <div id="gridLoadingOverlay" class="grid-loading-overlay hidden">
+    <div class="spinner-box">
+      <div class="spinner-ring"></div>
+      <div id="gridLoadingText" class="spinner-text">資料載入中，請稍候...</div>
+    </div>
+  </div>
+
+  <?!= include_('warehouse_grid_ui_js'); ?>
+</body>
+</html>

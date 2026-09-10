@@ -1,4 +1,3 @@
-<script>
 
   const state = {
     sheets: [],
@@ -89,101 +88,7 @@
   
   var _mt = { timer: null, startX: 0, startY: 0, dragging: false, ghost: null, overZone: null, suppressTapUntil: 0, touchMoved: false };
 
-  
-  async function deleteMovingPallet() {
-    if (!state.movingKey) return;
-    await confirmDeletePallet(state.movingKey);
-  }
-
-  async function confirmDeletePallet(palletKey) {
-    palletKey = String(palletKey || '').trim();
-    if (!palletKey) return;
-    var row = findRowByKey(palletKey) || state.movingRow;
-    var label = row ? ((row.SKU || '') + ' / ' + (row.Batch || '')) : palletKey;
-    if (!confirm('確認此棧板已出貨，要從庫位刪除？\n' + label + '\n\n此操作會立刻寫入試算表，無法用「取消這些移動」復原。')) return;
-    if (state.saving) return;
-    state.saving = true;
-    showGridLoading('正在刪除棧板…');
-    setStatus('刪除中…', 'loading');
-    try {
-      // 若在移動模式，先結束
-      state.movingKey = '';
-      state.movingRow = null;
-      state.movingGroupKeys = [];
-      document.querySelectorAll('.move-bar').forEach(function(el){ el.remove(); });
-      document.body.classList.remove('has-move-bar');
-      var result = await gas('deleteWarehousePallet', {
-        palletKey: palletKey,
-        sourceSheet: (row && row.Sheet) || state.activeSheet,
-        operator: getOperator()
-      });
-      if (result && result.history) applyHistory_(result.history);
-      if (result && result.zoneView) {
-        cacheSet('zone_' + result.zoneView.sheet, result.zoneView);
-        state.activeZoneView = result.zoneView;
-        state.activeSheet = result.zoneView.sheet;
-      }
-      state.activeItemKey = '';
-      state.activePalletKey = '';
-      renderOverviewTable();
-      renderDetailPanel();
-      setStatus('已刪除：' + label, 'ok');
-    } catch (e) {
-      var msg = (e && e.message) ? e.message : String(e);
-      setStatus('刪除失敗：' + msg, 'err');
-      alert('刪除失敗：' + msg);
-    } finally {
-      state.saving = false;
-      hideGridLoading();
-    }
-  }
-
-  async function deleteSingleSkuFromPallet(palletKey) {
-    palletKey = String(palletKey || '').trim();
-    if (!palletKey || state.saving) return;
-    var row = findRowByKey(palletKey) || state.movingRow;
-    var label = row ? ((row.SKU || '-') + ' / 批號: ' + (row.Batch || '-')) : palletKey;
-
-    if (!confirm('確認刪除此單一編號？\n' + label + '\n\n此操作會直接從此板中移除該編號並寫入試算表。')) return;
-
-    state.saving = true;
-    showGridLoading('正在刪除單一編號 ' + label + '…');
-    setStatus('刪除中…', 'loading');
-    try {
-      if (state.movingKey === palletKey) {
-        state.movingKey = '';
-        state.movingRow = null;
-        state.movingGroupKeys = [];
-        document.querySelectorAll('.move-bar').forEach(function(el){ el.remove(); });
-        document.body.classList.remove('has-move-bar');
-      }
-      var result = await gas('deleteWarehousePallet', {
-        palletKey: palletKey,
-        sourceSheet: (row && row.Sheet) || state.activeSheet,
-        operator: getOperator()
-      });
-      if (result && result.history) applyHistory_(result.history);
-      if (result && result.zoneView) {
-        cacheSet('zone_' + result.zoneView.sheet, result.zoneView);
-        state.activeZoneView = result.zoneView;
-        state.activeSheet = result.zoneView.sheet;
-      }
-      state.activeItemKey = '';
-      state.activePalletKey = '';
-      renderOverviewTable();
-      renderDetailPanel();
-      setStatus('已成功刪除單一編號：' + label, 'ok');
-    } catch (e) {
-      var msg = (e && e.message) ? e.message : String(e);
-      setStatus('刪除失敗：' + msg, 'err');
-      alert('刪除失敗：' + msg);
-    } finally {
-      state.saving = false;
-      hideGridLoading();
-    }
-  }
-
-function startMoveMode(palletKey) {
+  function startMoveMode(palletKey) {
     var row = findRowByKey(palletKey);
     if (!row) return;
     state.activePalletKey = palletKey;
@@ -515,21 +420,17 @@ function startMoveMode(palletKey) {
     state.recentlyMovedKey = moved.PalletKey;
   }
 
-  function clearPendingSaveBar_() {
-    document.querySelectorAll('#pendingSaveBar, .pending-save-bar').forEach(function(el){ el.remove(); });
-    document.body.classList.remove('has-pending-save');
-  }
-
   function renderPendingSaveBar_() {
-    clearPendingSaveBar_();
+    var old = document.getElementById('pendingSaveBar');
+    if (old) old.remove();
     var n = (state.pendingMoves || []).length;
     if (!n) return;
     var bar = document.createElement('div');
     bar.id = 'pendingSaveBar';
     bar.className = 'pending-save-bar';
-    bar.innerHTML = '<div class="pending-save-text"><strong>' + n + '</strong> 筆移動尚未寫入試算表</div>' +
-      '<button type="button" class="pending-save-btn" onclick="flushPendingMoves()">寫入試算表</button>' +
-      '<button type="button" class="pending-discard-btn" onclick="discardPendingMoves()">取消這些移動</button>';
+    bar.innerHTML = '<span>待存檔 <strong>' + n + '</strong> 筆移動</span>' +
+      '<button type="button" class="pending-save-btn" onclick="flushPendingMoves()">全部存檔</button>' +
+      '<button type="button" class="pending-discard-btn" onclick="discardPendingMoves()">丟棄</button>';
     document.body.appendChild(bar);
     document.body.classList.add('has-pending-save');
   }
@@ -537,18 +438,14 @@ function startMoveMode(palletKey) {
   async function flushPendingMoves() {
     if (!state.pendingMoves.length || state.saving) return;
     state.saving = true;
-    showGridLoading('一次寫入堆疊順序（' + state.pendingMoves.length + ' 筆移動）…');
+    showGridLoading('一次寫入 ' + state.pendingMoves.length + ' 筆移動…');
     setStatus('批次存檔中…', 'loading');
     var moves = state.pendingMoves.slice();
     try {
-      var orders = collectFinalDepthOrders_(moves);
-      var result = await gas('commitDepthOrders', {
-        moves: moves,
-        orders: orders,
-        operator: getOperator()
-      });
+      var result = await gas('movePalletBatch', { moves: moves, operator: getOperator() });
       state.pendingMoves = [];
-      clearPendingSaveBar_();
+      renderPendingSaveBar_();
+      document.body.classList.remove('has-pending-save');
       if (result && result.history) applyHistory_(result.history);
       if (result && result.zoneView) {
         cacheSet('zone_' + result.zoneView.sheet, result.zoneView);
@@ -563,7 +460,7 @@ function startMoveMode(palletKey) {
       if (bd) bd.classList.add('hidden');
       document.body.style.overflow = '';
       renderOverviewTable();
-      setStatus('已存檔 ' + moves.length + ' 筆移動 ✓（層序已鎖定）', 'ok');
+      setStatus('已存檔 ' + moves.length + ' 筆移動 ✓', 'ok');
     } catch (e) {
       var msg = (e && e.message) ? e.message : String(e);
       setStatus('批次存檔失敗：' + msg, 'err');
@@ -574,57 +471,13 @@ function startMoveMode(palletKey) {
     }
   }
 
-  /** @222 從樂觀 UI 收集最終堆疊順序（index0=最上層=Level1） */
-  function collectFinalDepthOrders_(moves) {
-    var zv = state.activeZoneView;
-    var keys = {};
-    (moves || []).forEach(function(m) {
-      keys[[m.sourceSheet, m.destSlot || '', m.destDepth || ''].join('|')] = 1;
-      keys[[m.destSheet || m.sourceSheet, m.destSlot, m.destDepth].join('|')] = 1;
-      keys[[m.sourceSheet, String((m.palletKey||'').split('||')[1]||''), String((m.palletKey||'').split('||')[2]||'')].join('|')] = 1;
-    });
-    var orders = [];
-    if (!zv) return orders;
-    (zv.slots || []).forEach(function(slot) {
-      (slot.depths || []).forEach(function(d) {
-        var k1 = [zv.sheet, slot.slotId, d.depth].join('|');
-        // 一律送出被移動碰過的 depth；若 keys 空則送全部有板的
-        var touched = Object.keys(keys).some(function(k){
-          var p = k.split('|');
-          return p[0] === String(zv.sheet) && p[1] === String(slot.slotId) && String(p[2]) === String(d.depth);
-        });
-        if (!touched && (moves||[]).length) return;
-        var list = (d.pallets || []).slice();
-        orders.push({
-          sheet: zv.sheet,
-          slot: String(slot.slotId),
-          depth: Number(d.depth),
-          pallets: list.map(function(p, idx){
-            return {
-              sku: p.SKU || '',
-              batch: p.Batch || '',
-              boxQty: Number(p.BoxQty || 0),
-              pieceQty: Number(p.PieceQty || 0),
-              bgColor: p.BgColor || p.bgColor || 'WHITE',
-              fontColor: p.FontColor || p.fontColor || 'BLACK',
-              PalletGroupId: p.PalletGroupId || '',
-              format: (p.BgColor === 'WHITE' || p.bgColor === 'WHITE') ? 'white' : 'colored',
-              level: idx + 1,
-              palletKey: p.PalletKey || ''
-            };
-          })
-        });
-      });
-    });
-    return orders;
-  }
-
   function discardPendingMoves() {
     if (!state.pendingMoves.length) return;
-    if (!confirm('取消 ' + state.pendingMoves.length + ' 筆尚未寫入的移動？畫面會回復存檔前位置。')) return;
+    if (!confirm('丟棄 ' + state.pendingMoves.length + ' 筆尚未存檔的移動？畫面將重新載入。')) return;
     state.pendingMoves = [];
-    clearPendingSaveBar_();
-    if (state.activeSheet) loadZone(state.activeSheet, null, null, null, { force: true });
+    renderPendingSaveBar_();
+    document.body.classList.remove('has-pending-save');
+    if (state.activeSheet) loadZone(state.activeSheet);
   }
 
 
@@ -856,29 +709,6 @@ function startMoveMode(palletKey) {
     wrap.innerHTML = _undoRedoBtnHtml_('undo', 'undo-btn') + _undoRedoBtnHtml_('redo', 'redo-btn');
   }
 
-  function closeUndoPicker() {
-    var p = document.getElementById('undoPicker');
-    if (p) p.remove();
-  }
-
-  function openUndoPicker() {
-    closeUndoPicker();
-    var max = Math.min(Number(_history.undoCount || 1), 20);
-    if (max <= 1) { undoSteps_(1); return; }
-    var box = document.createElement('div');
-    box.id = 'undoPicker';
-    box.className = 'undo-picker';
-    var opts = [1,2,3,5,10].filter(function(n){ return n < max; });
-    if (opts.indexOf(max) < 0) opts.push(max);
-    box.innerHTML = '<h4>還原幾步？</h4><div class="undo-picker-row">' +
-      opts.map(function(n){
-        var cls = (n === max) ? ' primary' : '';
-        return '<button type="button" class="' + cls + '" onclick="undoSteps_(' + n + ')">' + n + '</button>';
-      }).join('') +
-      '</div><button type="button" class="undo-picker-cancel" onclick="closeUndoPicker()">取消</button>';
-    document.body.appendChild(box);
-  }
-
   async function doUndo() {
     if (state.saving) {
       setStatus('尚有寫入進行中，請稍候再還原', 'err');
@@ -888,29 +718,27 @@ function startMoveMode(palletKey) {
       setStatus('目前沒有可還原的移動', 'err');
       return;
     }
-    openUndoPicker();
-  }
-
-  async function undoSteps_(n) {
-    closeUndoPicker();
-    n = Math.max(1, Math.min(Number(n) || 1, 20));
-    if (state.saving) return;
-    if (!_history.canUndo) return;
     state.saving = true;
     _historyBusy = 'undo';
     renderUndoRedo();
+    
     document.querySelectorAll('.move-bar-undo').forEach(function(b){ b.disabled = true; });
-    setStatus('還原 ' + n + ' 步…', 'loading');
-    showGridLoading('正在還原 ' + n + ' 步…');
+    setStatus('還原中…', 'loading');
+    showGridLoading('正在還原移動...');
     try {
-      var result = await gas('undoMoves', { n: n });
+      var result = await gas('undoLastMove');
       await applyMoveResult_(result);
-      setStatus('已還原 ' + (result && result.undone ? result.undone : n) + ' 步 ✓', 'ok');
+      setStatus('已還原 ✓', 'ok');
     } catch (e) {
       var msg = (e && e.message) ? e.message : String(e || 'unknown');
-      console.error('[undoSteps_]', msg, e);
-      setStatus('還原失敗：' + msg, 'err');
-      alert('還原失敗：' + msg);
+      console.error('[doUndo]', msg, e);
+      if (msg.indexOf('pallet not found') >= 0 || msg.indexOf('please refresh') >= 0) {
+        setStatus('⚠️ 還原失敗：找不到原棧板，請重新整理後手動確認', 'err');
+        _bgRefreshZone(state.activeSheet, false);
+      } else {
+        setStatus('還原失敗：' + msg, 'err');
+        alert('還原失敗：' + msg);
+      }
       gas('getMoveHistory').then(applyHistory_).catch(function(){});
     } finally {
       state.saving = false;
@@ -1241,12 +1069,8 @@ function startMoveMode(palletKey) {
 
   function fail(err) {
     hideGridLoading();
-    var msg = '';
-    if (err && err.message) msg = err.message;
-    else if (err && err.details) msg = err.details;
-    else msg = String(err || 'unknown');
-    console.error('[fail]', msg, err);
-    setStatus('載入失敗：' + msg, 'bad');
+    const msg = (err && (err.stack || err.message)) || String(err);
+    setStatus("載入失敗：\n" + msg, "bad");
   }
 
   function gas(method, ...args) {
@@ -1256,7 +1080,7 @@ function startMoveMode(palletKey) {
         return;
       }
       let done = false;
-      const timeoutMs = method === 'movePalletGroup' ? 90000 : method === 'movePallet' ? 60000 : method === "updateWarehousePallet" ? 45000 : method === "getSearchIndex" ? 45000 : method === "getWarehouseZoneView" ? 25000 : 40000;
+      const timeoutMs = method === 'movePalletGroup' ? 90000 : method === 'movePallet' ? 60000 : method === "updateWarehousePallet" ? 45000 : method === "getSearchIndex" ? 120000 : 60000;
       console.log('[gas calling]', method, JSON.stringify(args[0] || ''));
       const timer = setTimeout(() => {
         if (!done) {
@@ -1364,8 +1188,7 @@ function startMoveMode(palletKey) {
 
   
   const CACHE_FRESH_MS  =  5 * 60 * 1000;   
-  const CACHE_STALE_MS  = 30 * 60 * 1000;
-  const CACHE_SEARCH_MS = 24 * 60 * 60 * 1000; // @222 搜尋日快取   
+  const CACHE_STALE_MS  = 30 * 60 * 1000;   
   
 
   function cacheGet(key) {
@@ -1475,7 +1298,7 @@ function startMoveMode(palletKey) {
       const ageMs = cacheAgeMs('zone_' + sheet.name);
       if (ageMs < CACHE_STALE_MS) continue;              
       await _bgRefreshZone(sheet.name, true);            
-      await new Promise(r => setTimeout(r, 150)); // @227 faster warm        
+      await new Promise(r => setTimeout(r, 600));        
     }
     console.log('[preload] all zones warmed');
   }
@@ -1509,31 +1332,11 @@ function startMoveMode(palletKey) {
       
       gas('getMoveHistory').then(applyHistory_).catch(() => {});
       
-      setTimeout(_preloadAllZones, 800); // @227 sooner warm
+      setTimeout(_preloadAllZones, 3000);
     } catch (err) {
       hideGridLoading();
       fail(err);
     }
-  }
-
-  function mergeZoneIntoSearch_(zoneView) {
-    if (!zoneView || !zoneView.slots) return;
-    if (!Array.isArray(state.searchRows)) state.searchRows = [];
-    var byKey = {};
-    state.searchRows.forEach(function(r){ if (r && r.PalletKey) byKey[r.PalletKey] = r; });
-    (zoneView.slots || []).forEach(function(slot) {
-      (slot.depths || []).forEach(function(d) {
-        (d.pallets || []).forEach(function(p) {
-          var row = Object.assign({ Sheet: zoneView.sheet }, p);
-          if (!row.PalletKey) {
-            row.PalletKey = [zoneView.sheet, row.Slot, row.Depth, row.Level, row.SKU, row.Batch].join('||');
-          }
-          byKey[row.PalletKey] = row;
-        });
-      });
-    });
-    state.searchRows = Object.keys(byKey).map(function(k){ return byKey[k]; });
-    state.searchReady = state.searchRows.length > 0;
   }
 
   function buildFallbackSearchIndex_() {
@@ -1587,55 +1390,37 @@ function startMoveMode(palletKey) {
   }
 
   async function preloadSearchIndex() {
-    // @222: 先用本地區快取秒開；背景再拉全日索引（24h）
-    var local = buildFallbackSearchIndex_();
-    var cached = cacheGet('search');
-    var ageMs = cacheAgeMs('search');
-    if (Array.isArray(cached) && cached.length && ageMs < CACHE_SEARCH_MS) {
-      state.searchRows = cached;
-      state.searchReady = true;
-      renderSearch();
-    } else if (local.length) {
-      state.searchRows = local;
-      state.searchReady = true;
-      renderSearch();
-    }
-    // 背景更新（不擋搜尋、不重複提示）
-    (async function() {
-      try {
-        if (Array.isArray(cached) && cached.length && ageMs < CACHE_SEARCH_MS) return;
-        var raw = await gas('getSearchIndex');
-        var rows = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (Array.isArray(rows) && rows.length) {
-          cacheSet('search', rows);
-          state.searchRows = rows;
-          state.searchReady = true;
-          renderSearch();
-        }
-      } catch (err) {
-        console.warn('search bg refresh failed', err);
-        if (!state.searchReady) {
-          var fb = buildFallbackSearchIndex_();
-          if (fb.length) {
-            state.searchRows = fb;
-            state.searchReady = true;
-            renderSearch();
-          }
-        }
+    try {
+      let rows = cacheGet('search');
+      const ageMs = cacheAgeMs('search');
+      if (!rows || ageMs >= CACHE_STALE_MS) {
+        const raw = await gas("getSearchIndex");
+        rows = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (Array.isArray(rows)) cacheSet('search', rows);
       }
-    })();
+      if (Array.isArray(rows)) {
+        state.searchRows = rows;
+        state.searchReady = true;
+        renderSearch();
+        return;
+      }
+      throw new Error('search index empty');
+    } catch (err) {
+      console.warn("search preload failed", err);
+      var msg = (err && err.message) ? err.message : String(err || 'unknown');
+      var fallback = buildFallbackSearchIndex_();
+      state.searchRows = fallback;
+      state.searchReady = true;
+      if (fallback.length) {
+        setStatus('搜尋索引載入失敗，已用已載入分區建立臨時索引（' + fallback.length + ' 筆）：' + msg, 'err');
+      } else {
+        setStatus('搜尋索引載入失敗：' + msg + '（尚無可用分區資料，請先打開分區後再搜）', 'err');
+      }
+      try { renderSearch(); } catch (e3) {}
+    }
   }
 
-  async function loadZone(sheetName, preferredSlot, preferredDepth, preferredPalletKey, opts) {
-    opts = opts || {};
-    var same = (sheetName === state.activeSheet && state.activeZoneView);
-    var noJump = !preferredSlot && !preferredDepth && !preferredPalletKey;
-    if (same && noJump && !opts.force) {
-      // @223 已在此區：不重讀
-      renderZoneChips();
-      setStatus('目前在 ' + sheetName, 'ok');
-      return;
-    }
+  async function loadZone(sheetName, preferredSlot, preferredDepth, preferredPalletKey) {
     state.activeSheet = sheetName;
     localStorage.setItem('wms_last_zone', sheetName);
     renderZoneChips();
@@ -1650,7 +1435,6 @@ function startMoveMode(palletKey) {
       state.activeDepth = Number(preferredDepth || 0);
       state.activePalletKey = preferredPalletKey || "";
       state.activeItemKey = preferredPalletKey || "";
-      mergeZoneIntoSearch_(zoneView);
       renderOverviewTable();
       renderDetailPanel();
       renderSearch();
@@ -1679,7 +1463,6 @@ function startMoveMode(palletKey) {
       state.activeDepth = Number(preferredDepth || 0);
       state.activePalletKey = preferredPalletKey || "";
       state.activeItemKey = preferredPalletKey || "";
-      mergeZoneIntoSearch_(zoneView);
       renderOverviewTable();
       renderDetailPanel();
       renderSearch();
@@ -1722,12 +1505,11 @@ function startMoveMode(palletKey) {
       filteredSheets = filteredSheets.filter(s => s.name.startsWith('C-'));
     }
 
-    const sorted = (q && q.pickedSku)
+    const sorted = hasSearchQuery(q)
       ? [...filteredSheets].sort((a, b) => (zoneHits.has(a.name) ? 0 : 1) - (zoneHits.has(b.name) ? 0 : 1))
       : filteredSheets;
 
-    // @224：未選定完整編號前不亮區框（避免 612110 誤亮 B-F）
-    const searching = !!(q && q.pickedSku);
+    const searching = hasSearchQuery(q);
     $("zoneChips").innerHTML = sorted.map(sheet => {
       const active = sheet.name === state.activeSheet ? "active" : "";
       const isHit = searching && zoneHits.has(sheet.name);
@@ -1877,12 +1659,10 @@ function startMoveMode(palletKey) {
       var skuL = sku.toLowerCase();
       var han = String(row.HanhwaCode || '').toLowerCase();
       var ok = false;
-      if (/^\d{5,}$/.test(needle)) {
-        ok = han === needle || han.endsWith(needle) || skuL.endsWith(needle) || skuL.indexOf(needle) >= 0;
-      } else if (needle.length >= 2) {
-        ok = skuL === needle || skuL.indexOf(needle) >= 0 || skuL.startsWith(needle) || han.indexOf(needle) >= 0;
+      if (/^\d{5}$/.test(needle)) {
+        ok = han === needle || skuL.endsWith(needle) || skuL.indexOf(needle) >= 0;
       } else {
-        ok = skuL.startsWith(needle) || han.startsWith(needle);
+        ok = skuL === needle || skuL.indexOf(needle) >= 0 || han === needle;
       }
       if (!ok) return;
       if (!map[skuL]) {
@@ -1908,91 +1688,27 @@ function startMoveMode(palletKey) {
     return Object.keys(set).sort().map(function(b){ return { batch: b, count: set[b] }; });
   }
 
-  
-  function bindSkuDropdownClicks_(el) {
-    if (!el || el._boundSku) return;
-    el._boundSku = true;
-    function handle(ev) {
-      var btn = ev.target && ev.target.closest && ev.target.closest('[data-sku]');
-      if (!btn || !el.contains(btn)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      selectSearchSku(btn.getAttribute('data-sku') || '');
-    }
-    el.addEventListener('click', handle);
-    el.addEventListener('touchend', handle, { passive: false });
-  }
-  function bindBatchDropdownClicks_(el) {
-    if (!el || el._boundBatch) return;
-    el._boundBatch = true;
-    function handle(ev) {
-      var btn = ev.target && ev.target.closest && ev.target.closest('[data-batch]');
-      if (!btn || !el.contains(btn)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      selectSearchBatch(btn.getAttribute('data-batch') || '');
-    }
-    el.addEventListener('click', handle);
-    el.addEventListener('touchend', handle, { passive: false });
-  }
-
-function selectSearchSku(sku) {
-    sku = String(sku || '').trim();
-    if (!sku) return;
-    state.searchPick = { sku: sku, batch: '' };
-    var skuInput = $("searchSku");
-    if (skuInput) {
-      skuInput.value = sku;
-      state._ignoreSkuInputOnce = true;
-    }
-    var batchInput = $("searchBatch");
-    if (batchInput) batchInput.value = '';
-    var sd = $("skuDropdown");
-    if (sd) { sd.innerHTML = ''; sd.classList.add('hidden'); }
-    state.searchPick.batchChosen = false; // @227 尚未選批號 → 不導航
+  function selectSearchSku(sku) {
+    state.searchPick = state.searchPick || { sku: '', batch: '' };
+    state.searchPick.sku = sku || '';
+    state.searchPick.batch = '';
+    if ($("searchBatch")) $("searchBatch").value = '';
     renderSearch();
-    if (batchInput) {
-      setTimeout(function(){ try { batchInput.focus(); } catch(e){} }, 30);
-    }
-    // 選編號後只開批號下拉，不置中跳轉
+    
+    navigateToFirstSearchHit_();
   }
 
   function selectSearchBatch(batch) {
     state.searchPick = state.searchPick || { sku: '', batch: '' };
     state.searchPick.batch = batch || '';
-    state.searchPick.batchChosen = true; // 含「全部批號」
     if ($("searchBatch")) $("searchBatch").value = batch || '';
-    var bd = $("batchDropdown"); if (bd) { bd.classList.add("hidden"); bd.innerHTML = ""; }
     renderSearch();
-    navigateToFirstSearchHit_(); // @227 只有選完批號才跳
+    navigateToFirstSearchHit_();
   }
 
   function clearSearchPick() {
-    state.searchPick = { sku: '', batch: '', batchChosen: false };
+    state.searchPick = { sku: '', batch: '' };
     renderSearch();
-  }
-
-  function clearSkuSearch() {
-    state.searchPick = { sku: '', batch: '', batchChosen: false };
-    state._ignoreSkuInputOnce = true;
-    if ($("searchSku")) $("searchSku").value = '';
-    if ($("searchBatch")) $("searchBatch").value = '';
-    var sd = $("skuDropdown"); if (sd) { sd.innerHTML=''; sd.classList.add('hidden'); }
-    var bd = $("batchDropdown"); if (bd) { bd.innerHTML=''; bd.classList.add('hidden'); }
-    if ($("searchHint")) $("searchHint").textContent = '';
-    setStatus('', 'ok');
-    renderZoneChips();
-    renderOverviewTable();
-  }
-
-  function clearBatchSearch() {
-    if (state.searchPick) {
-      state.searchPick.batch = '';
-      state.searchPick.batchChosen = false;
-    }
-    state._ignoreBatchInputOnce = true;
-    if ($("searchBatch")) $("searchBatch").value = '';
-    renderSearch(); // 重開批號下拉，不導航
   }
 
   async function navigateToFirstSearchHit_() {
@@ -2206,7 +1922,7 @@ function selectSearchSku(sku) {
         const query = currentSearchQuery();
         const slotDepthHits = searchSlotDepthSet();
         const lineHtml = pallets.map((row, idx) => {
-          const hit = (query.pickedSku && rowMatchesQuery(row, query)) ? 'hit' : '';
+          const hit = rowMatchesQuery(row, query) ? 'hit' : '';
           const isRed = row.BgColor === 'RED' || row.Status === '混板/散板';
           const isYellow = row.BgColor === 'YELLOW';
           const isGreen = row.BgColor === 'GREEN';
@@ -2214,10 +1930,11 @@ function selectSearchSku(sku) {
           const statusBadge = isRed ? '<span class="status-tag red">散板</span>' : isYellow ? '<span class="status-tag yellow">散板</span>' : isGreen ? '<span class="status-tag green">專案</span>' : '';
           const movedCls = isRecentlyMoved(row) ? 'just-moved' : '';
           var batchHtml = hasSearchQuery(query) ? '' : ('<div class="cell-batch-badge">' + esc(row.Batch || '-') + '</div>');
-          return '<div class="cell-line ' + hit + ' ' + colorCls + ' ' + movedCls + '"><div class="cell-main"><div class="cell-sku">' + esc(row.SKU || '-') + ' ' + statusBadge + '</div></div>' + batchHtml + '</div>';
+          var hitTag = hit ? '<span class="status-tag yellow">搜到</span>' : '';
+          return '<div class="cell-line ' + hit + ' ' + colorCls + ' ' + movedCls + '"><div class="cell-main"><div class="cell-sku">' + esc(row.SKU || '-') + ' ' + statusBadge + hitTag + '</div></div>' + batchHtml + '</div>';
         }).join('');
         const hitKey = [state.activeSheet, slot.slotId, depth].join('||');
-        const anyHit = (query.pickedSku) && slotDepthHits.has(hitKey) ? 'search-hit-frame' : '';
+        const anyHit = hasSearchQuery(query) && slotDepthHits.has(hitKey) ? 'search-hit-frame' : '';
         const active = state.activeSlot === slot.slotId && Number(state.activeDepth) === Number(depth) ? 'active' : '';
         const area = (state.activeSheet || '').replace(/-/g, '_');
         const lv = v => '<span class="cf-val">' + esc(String(v)) + '</span>';
@@ -2390,8 +2107,7 @@ function selectSearchSku(sku) {
             var tag = isRed ? ' <span class="status-tag red" style="font-size:9px;padding:0 3px">散板</span>' : isYellow ? ' <span class="status-tag yellow" style="font-size:9px;padding:0 3px">散板</span>' : isGreen ? ' <span class="status-tag green" style="font-size:9px;padding:0 3px">專案</span>' : '';
             var movedCls = isRecentlyMoved(row) ? ' just-moved' : '';
             var timeHtml = row.UpdatedAt ? '<span class="pallet-card-time" style="color:#7ff0a6;font-size:10px;font-weight:800;margin-left:4px">🕒 ' + esc(formatMoveTime(row.UpdatedAt)) + '</span>' : '';
-            var deleteX = '<span class="pallet-card-delete-x" onclick="event.stopPropagation(); deleteSingleSkuFromPallet(' + JSON.stringify(row.PalletKey || '') + '); return false;" title="刪除此單一編號">✕</span>';
-            return '<button class="pallet ' + paletteClass(row) + ' ' + selected + movedCls + '" data-key="' + esc(row.PalletKey || '') + '" onclick="onPalletTap(' + JSON.stringify(row.PalletKey || '') + '); return false;">' + deleteX + '<div class="pallet-sku">' + skuHtml(row.SKU || '-') + tag + '</div><div class="pallet-meta"><span>' + esc(row.Batch || '-') + '</span><span>' + esc(formatPalletQty_(row)) + timeHtml + '</span></div></button>';
+            return '<button class="pallet ' + paletteClass(row) + ' ' + selected + movedCls + '" data-key="' + esc(row.PalletKey || '') + '" onclick="onPalletTap(' + JSON.stringify(row.PalletKey || '') + '); return false;"><div class="pallet-sku">' + skuHtml(row.SKU || '-') + tag + '</div><div class="pallet-meta"><span>' + esc(row.Batch || '-') + '</span><span>' + esc(formatPalletQty_(row)) + timeHtml + '</span></div></button>';
           }).join('');
           if (group.pallets.length > 1) {
             return '<div class="pallet-group">' + palletHtml + '</div>';
@@ -2434,7 +2150,6 @@ function selectSearchSku(sku) {
         '<span class="move-bar-sku">' + esc(srcRow ? srcRow.SKU || '-' : '-') + groupTag + '</span>' +
         '<button type="button" class="move-bar-undo" onclick="doUndo()" ' + (canUndo ? '' : 'disabled') + '>還原</button>' +
         '<button type="button" class="move-bar-slot-btn" onclick="openMoveSlotPicker()">移動到其它列</button>' +
-        '<button type="button" class="move-bar-trash" onclick="deleteMovingPallet()">🗑 出貨刪除</button>' +
         '<button type="button" class="move-bar-cancel" onclick="cancelMoveMode()">取消</button>' +
         '</div>';
       document.body.insertAdjacentHTML('beforeend', moveBarHtml);
@@ -2512,11 +2227,7 @@ function selectSearchSku(sku) {
     const kgBox = (row.KgPerBox != null && row.KgPerBox !== '') ? Math.ceil(Number(row.KgPerBox)) + ' KG' : '-';
     const kgPallet = (row.KgPerPallet != null && row.KgPerPallet !== '') ? Math.ceil(Number(row.KgPerPallet)) + ' KG' : '-';
     const pzStr = row.PiecesPerBox ? String(row.PiecesPerBox) + ' pz/箱' : '';
-    var rawImg = row.SinglePieceImage || row.ImageUrl || ((row.Branches || [])[0] || {}).SinglePieceImage || '';
-    if (!rawImg && state.searchRows) {
-      var _hi = state.searchRows.find(function(r){ return String(r.SKU||'').toLowerCase() === String(row.SKU||'').toLowerCase(); });
-      if (_hi) rawImg = _hi.SinglePieceImage || _hi.ImageUrl || '';
-    }
+    const rawImg = row.SinglePieceImage || ((row.Branches || [])[0] || {}).SinglePieceImage || '';
     const imgUrl = driveThumbUrl(rawImg);
     const imgHtml = imgUrl ? '<div class="item-img-wrap"><img class="item-img" src="' + esc(imgUrl) + '" alt="' + esc(row.SKU || '') + '" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></div>' : '';
 
@@ -2553,7 +2264,6 @@ function selectSearchSku(sku) {
         '<div class="item-sum-actions" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">' +
           '<button type="button" class="detail-toggle" style="margin:0" onclick="openEditByKey(' + JSON.stringify(row.PalletKey || '') + ')">編輯此板</button>' +
           '<button type="button" class="detail-toggle" style="margin:0;background:#1b3252;border-color:#3b659c;color:#7ec0ff" onclick="startMoveMode(' + JSON.stringify(row.PalletKey || '') + ')">🚚 移動</button>' +
-          '<button type="button" class="detail-toggle" style="margin:0;background:#3a1520;border-color:#a33;color:#ff8f8f" onclick="confirmDeletePallet(' + JSON.stringify(row.PalletKey || '') + ')">🗑 出貨刪除</button>' +
           '<button id="itemDetailToggle" class="detail-toggle" style="margin:0;margin-left:auto" onclick="toggleItemSpecs()">完整資訊 ▼</button>' +
         '</div>' +
       '</div>' +
@@ -2582,112 +2292,107 @@ function selectSearchSku(sku) {
     if ($("searchResults")) $("searchResults").innerHTML = "";
 
     var hint = $("searchHint");
-    var skuDrop = $("skuDropdown");
-    var batchDrop = $("batchDropdown");
+    var pickBar = $("searchPickBar");
     var raw = (q.rawSku || "").trim();
-    var rawBatch = (q.rawBatch || "").trim();
 
-    function hideDrops() {
-      if (skuDrop) { skuDrop.innerHTML = ""; skuDrop.classList.add("hidden"); }
-      if (batchDrop) { batchDrop.innerHTML = ""; batchDrop.classList.add("hidden"); }
-    }
-    function fillDrop(el, html) {
-      if (!el) return;
-      if (!html) { el.innerHTML = ""; el.classList.add("hidden"); return; }
-      el.innerHTML = html;
-      el.classList.remove("hidden");
-    }
-
+    
     if (state.searchPick && state.searchPick.sku) {
       var ps = String(state.searchPick.sku).toLowerCase();
-      if (raw && ps !== raw.toLowerCase() && !ps.endsWith(raw.toLowerCase()) && !/^\d{5}$/.test(raw) && ps.indexOf(raw.toLowerCase()) < 0) {
+      if (raw && ps !== raw && raw.length < ps.length && ps.indexOf(raw) < 0 && !/^\d{5}$/.test(raw)) {
+        
+      }
+      if (raw && ps !== raw && !ps.endsWith(raw) && raw !== ps && !/^\d{5}$/.test(raw) && ps.indexOf(raw) < 0) {
         state.searchPick = { sku: '', batch: '' };
       }
     }
 
-    if (!raw && !rawBatch) {
+    if (!raw && !(q.rawBatch)) {
       state.searchPick = { sku: '', batch: '' };
       if (hint) hint.textContent = "";
-      hideDrops();
+      if (pickBar) pickBar.innerHTML = "";
       renderZoneChips();
       renderOverviewTable();
       return;
     }
 
     if (!state.searchReady) {
-      var fb = buildFallbackSearchIndex_();
-      if (fb.length) {
-        state.searchRows = fb;
-        state.searchReady = true;
-      } else {
-        if (hint) hint.textContent = "";
-        fillDrop(skuDrop, '<div class="search-dd-empty">索引準備中…</div>');
-        renderZoneChips();
-        renderOverviewTable();
-        return;
-      }
-    }
-
-    // 編號尚未選定 → SKU 下拉貼在編號框下
-    if (!state.searchPick.sku) {
-      var cands = uniqueSkuCandidates_(raw);
-      if (hint) hint.textContent = cands.length ? ("符合 " + cands.length + " 個編號") : (raw ? "找不到符合的編號" : "");
-      fillDrop(batchDrop, "");
-      if (!raw) {
-        fillDrop(skuDrop, "");
-        setStatus('', 'ok');
-      } else if (!cands.length) {
-        fillDrop(skuDrop, '<div class="search-dd-empty">找不到符合的編號</div>');
-        setStatus('找不到符合的編號', 'err');
-      } else {
-        setStatus('符合 ' + cands.length + ' 個編號，請點選', 'ok');
-        fillDrop(skuDrop, cands.map(function(c) {
-          var cc = companyClass(c.company);
-          var co = c.company ? ('<small>' + esc(c.company) + '</small>') : '';
-          return '<button type="button" class="search-dd-item ' + cc + '" data-sku="' + esc(c.sku) + '">' +
-            '<strong>' + esc(c.sku) + '</strong>' + co + '<span class="pick-count">' + c.count + '</span></button>';
-        }).join(''));
-        bindSkuDropdownClicks_(skuDrop);
-      }
+      if (hint) hint.textContent = "索引載入中…";
+      if (pickBar) pickBar.innerHTML = "";
+      setStatus("搜尋索引載入中，請稍候", "loading");
       renderZoneChips();
       renderOverviewTable();
       return;
     }
 
-    // 已選編號 → 批號下拉貼在批號框下
+    
+    if (!state.searchPick.sku) {
+      var cands = uniqueSkuCandidates_(raw);
+      if (hint) {
+        hint.textContent = cands.length
+          ? ("符合 " + cands.length + " 個編號，請點選；區域黃框＝有貨")
+          : "找不到符合的編號";
+      }
+      if (pickBar) {
+        if (!cands.length) pickBar.innerHTML = "";
+        else {
+          pickBar.innerHTML = '<div class="pick-label">選擇完整編號</div><div class="pick-row">' +
+            cands.map(function(c) {
+              var cc = companyClass(c.company);
+              var co = c.company ? ('<small>' + esc(c.company) + '</small>') : '';
+              return '<button type="button" class="sku-pick-chip ' + cc + '" onclick="selectSearchSku(' + JSON.stringify(c.sku) + ')">' +
+                '<strong>' + esc(c.sku) + '</strong>' + co + '<span class="pick-count">' + c.count + '</span></button>';
+            }).join('') + '</div>';
+        }
+      }
+      
+      renderZoneChips();
+      renderOverviewTable();
+      return;
+    }
+
+    
     var batches = batchesForSku_(state.searchPick.sku);
     if (hint) {
       hint.textContent = state.searchPick.batch
         ? ("編號 " + state.searchPick.sku + "／批號 " + state.searchPick.batch)
-        : ("編號 " + state.searchPick.sku + "：選批號或全部");
+        : ("編號 " + state.searchPick.sku + "：選批號，或不選＝顯示全部");
     }
-    fillDrop(skuDrop, "");
-    var batchHtml =
-      '<button type="button" class="search-dd-item batch-pick-chip' + (!state.searchPick.batch ? ' selected' : '') + '" data-batch="">全部批號</button>' +
-      batches.filter(function(b){
-        if (!rawBatch) return true;
-        return String(b.batch||'').toLowerCase().indexOf(rawBatch.toLowerCase()) >= 0;
-      }).map(function(b) {
-        var sel = state.searchPick.batch === b.batch ? ' selected' : '';
-        return '<button type="button" class="search-dd-item batch-pick-chip' + sel + '" data-batch="' + esc(b.batch) + '">' +
-          esc(b.batch) + '<span class="pick-count">' + b.count + '</span></button>';
-      }).join('');
-    // keep batch dropdown open while picking
-    fillDrop(batchDrop, batchHtml || '<div class="search-dd-empty">此編號無批號</div>');
-    bindBatchDropdownClicks_(batchDrop);
+    if (pickBar) {
+      pickBar.innerHTML =
+        '<div class="pick-label"><button type="button" class="pick-back" onclick="clearSearchPick()">← 重選編號</button> 批號</div>' +
+        '<div class="pick-row">' +
+        '<button type="button" class="batch-pick-chip' + (!state.searchPick.batch ? ' selected' : '') + '" onclick="selectSearchBatch(' + JSON.stringify('') + ')">全部批號</button>' +
+        batches.map(function(b) {
+          var sel = state.searchPick.batch === b.batch ? ' selected' : '';
+          return '<button type="button" class="batch-pick-chip' + sel + '" onclick="selectSearchBatch(' + JSON.stringify(b.batch) + ')">' +
+            esc(b.batch) + '<span class="pick-count">' + b.count + '</span></button>';
+        }).join('') + '</div>';
+    }
 
     renderZoneChips();
     renderOverviewTable();
     var matches = searchMatches();
-    var zones = Array.from(new Set(matches.map(function(r){ return r.Sheet; })));
-    if (state.searchPick.batchChosen) {
-      setStatus(matches.length
-        ? ("找到 " + matches.length + " 筆 @ " + zones.join("、"))
-        : "此編號目前無庫存列", matches.length ? "ok" : "err");
-    } else if (state.searchPick.sku) {
-      setStatus("已選 " + state.searchPick.sku + " → 請選批號", "ok");
+    var hit0 = matches.find(function(r){ return r.Sheet === state.activeSheet; }) || matches[0];
+    if (hint && hit0) {
+      var zoneLabel = hit0.Sheet || '';
+      if (state.searchPick.batch) {
+        hint.textContent = "編號 " + state.searchPick.sku + "／批號 " + state.searchPick.batch + " → " + zoneLabel;
+      } else {
+        hint.textContent = "編號 " + state.searchPick.sku + "：選批號，或不選＝顯示全部 → 命中區 " + zoneLabel;
+      }
     }
-    // @227 不在 renderSearch 自動跳轉；只在 selectSearchBatch 導航
+    setStatus(matches.length ? ("找到 " + matches.length + " 筆，俯視圖黃框閃爍" + (hit0 && hit0.Sheet ? ("（" + hit0.Sheet + "）") : "")) : "此編號目前無庫存列", matches.length ? "ok" : "err");
+
+    setTimeout(async function() {
+      var hit = matches.find(function(r){ return r.Sheet === state.activeSheet; }) || matches[0];
+      if (!hit) return;
+      try {
+        if (hit.Sheet && hit.Sheet !== state.activeSheet) {
+          await loadZone(hit.Sheet);
+        }
+        scrollSearchHitIntoView_(hit.Slot, hit.Depth);
+      } catch (eNav) { console.warn('search hit nav', eNav); }
+    }, 100);
   }
 
   async function jumpFromSearch(sheetName, slotId, depth, palletKey) {
@@ -2721,7 +2426,6 @@ function selectSearchSku(sku) {
       if (!row.KgPerBox) row.KgPerBox = match.KgPerBox;
       if (!row.BoxesPerPallet) row.BoxesPerPallet = match.BoxesPerPallet;
       if (!row.HanhwaCode) row.HanhwaCode = match.HanhwaCode;
-      if (!row.SinglePieceImage) row.SinglePieceImage = match.SinglePieceImage || match.ImageUrl || '';
     }
     return row;
   }
@@ -2751,14 +2455,6 @@ function selectSearchSku(sku) {
     openEditByKey(palletKey);
   }
 
-  function triggerDeleteFromEdit() {
-    var key = state.activePalletKey;
-    closeEdit(true);
-    if (key) {
-      confirmDeletePallet(key);
-    }
-  }
-
   function openEditByKey(palletKey) {
     const row = findRowByKey(palletKey);
     if (!row) return;
@@ -2768,8 +2464,7 @@ function selectSearchSku(sku) {
     $("editSku").value = row.SKU || '';
     $("editBatch").value = row.Batch || '';
     if ($("editBrand")) $("editBrand").value = detailValue(row.Brand);
-    var seriesDisp = row.ChineseSeries ? (row.ChineseSeries + (row.Series ? ' (' + row.Series + ')' : '')) : (row.Series || '');
-    if ($("editSeries")) $("editSeries").value = detailValue(seriesDisp);
+    if ($("editSeries")) $("editSeries").value = detailValue(row.Series || row.ChineseSeries);
     if ($("editOriginalName")) $("editOriginalName").value = detailValue(row.OriginalName);
     if ($("editSize")) $("editSize").value = detailValue(row.Size);
     $("editBoxes").value = Number(row.BoxQty || 0);
@@ -2786,22 +2481,16 @@ function selectSearchSku(sku) {
     
     var imgBox = $('editProductImg');
     if (imgBox) {
-      var url = row.SinglePieceImage || row.ImageUrl || row.imageUrl || '';
+      var url = row.ImageUrl || row.imageUrl || '';
       if (!url && state.searchRows) {
-        var hit = state.searchRows.find(function(r){
-          return String(r.SKU||'').trim().toLowerCase() === String(row.SKU||'').trim().toLowerCase();
-        });
-        if (hit) url = hit.SinglePieceImage || hit.ImageUrl || hit.imageUrl || '';
+        var hit = state.searchRows.find(function(r){ return String(r.SKU||'').toLowerCase() === String(row.SKU||'').toLowerCase(); });
+        if (hit) url = hit.ImageUrl || hit.imageUrl || '';
       }
       if (url) {
-        var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-        if (match && match[1]) {
-          url = 'https://lh3.googleusercontent.com/d/' + match[1] + '=w600';
-        }
-        imgBox.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(row.SKU||'') + '" style="max-width:100%;max-height:140px;border-radius:10px;object-fit:contain;background:#0b1322;border:1px solid #233452">';
+        imgBox.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(row.SKU||'') + '" style="max-width:100%;max-height:160px;border-radius:10px;object-fit:contain;background:#0b1322">';
         imgBox.style.display = '';
       } else {
-        imgBox.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px 0">（價目表尚無單片圖片欄可預覽）</div>';
+        imgBox.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">（價目表尚無圖片欄可預覽）</div>';
         imgBox.style.display = '';
       }
     }
@@ -2976,20 +2665,9 @@ function selectSearchSku(sku) {
       if (e.key === "Escape") forceCloseAllOverlays();
     });
     $("searchSku").addEventListener("input", onSkuInput);
-    $("searchSku").addEventListener("focus", function(){ renderSearch(); });
-    document.addEventListener("click", function(ev){
-      var sf = $("skuField"); var bf = $("batchField");
-      if (sf && !sf.contains(ev.target)) { var d=$("skuDropdown"); if(d) d.classList.add("hidden"); }
-      if (bf && !bf.contains(ev.target)) { var d2=$("batchDropdown"); if(d2) d2.classList.add("hidden"); }
-      var up = document.getElementById("undoPicker");
-      if (up && !up.contains(ev.target) && !(ev.target.closest && ev.target.closest(".undo-btn, .banner-undo-btn, .move-bar-undo"))) {
-        closeUndoPicker();
-      }
-    });
     $("searchBatch").addEventListener("input", onBatchInput);
     $("zoneChips").addEventListener("click", e => { const btn = e.target.closest(".zone-chip[data-sheet]"); if (btn) loadZone(btn.dataset.sheet); });
     $("overviewTableWrap").addEventListener("click", e => { const btn = e.target.closest(".cell-btn[data-slot][data-depth]"); if (btn) selectCell(btn.dataset.slot, Number(btn.dataset.depth)); });
-
     $("searchResults").addEventListener("click", e => { const btn = e.target.closest(".search-card[data-sheet]"); if (btn) jumpFromSearch(btn.dataset.sheet, btn.dataset.slot, Number(btn.dataset.depth), btn.dataset.key || ''); });
     $("cellItems").addEventListener("click", e => { const btn = e.target.closest(".item-chip[data-key]"); if (btn) selectItem(btn.dataset.key); });
     
@@ -3084,22 +2762,9 @@ function selectSearchSku(sku) {
     if (e.target.closest('.stack, .cell-btn, .overview-table')) e.preventDefault();
   });
 
-  window.selectSearchSku = selectSearchSku;
-  window.selectSearchBatch = selectSearchBatch;
-  window.clearSearchPick = clearSearchPick;
-  window.clearSkuSearch = clearSkuSearch;
-  window.clearBatchSearch = clearBatchSearch;
-  window.undoSteps_ = undoSteps_;
-  window.deleteMovingPallet = deleteMovingPallet;
-  window.confirmDeletePallet = confirmDeletePallet;
-  window.flushPendingMoves = flushPendingMoves;
-  window.discardPendingMoves = discardPendingMoves;
-
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => { setupListeners(); boot(); });
   } else {
     setupListeners();
     boot();
   }
-
-</script>

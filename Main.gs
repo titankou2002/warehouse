@@ -87,6 +87,29 @@ function doGet(e) {
     }
   }
 
+  if (e && e.parameter && e.parameter.action === 'migrate') {
+    try {
+      var summary = migrateVisualGridToDataTable();
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, summary: summary }))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch (ex) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: ex.message }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  if (e && e.parameter && e.parameter.action === 'debugskuset') {
+    try {
+      var skuSet = buildSkuSet_();
+      var keys = Object.keys(skuSet);
+      return ContentService.createTextOutput(JSON.stringify({ total: keys.length, sample: keys.slice(0, 50) }))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch (ex) {
+      return ContentService.createTextOutput('{"error":"' + ex.message.replace(/"/g, '\\"') + '"}')
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
   if (e && e.parameter && e.parameter.legacy === '1') {
     return renderWarehouseApp_();
   }
@@ -245,51 +268,36 @@ function collectPalletStartRowsForSlot_(grid, prodCol) {
   if (!grid || !grid.length || !grid[0]) return starts;
 
   var numRows = grid.length;
-  var hasBoldColored = false;
+
+  // 使用「同色連續段」偵測：每個同色塊的起始列 = 新棧板開始
+  var inColorBlock = false;
+  var lastColor = null;
   for (var r = 1; r < numRows; r++) {
     var cell = grid[r][prodCol];
     if (!cell) continue;
     var val = cleanValue(cell.value);
     var bg = identifyBgColor(cell.bgColor);
-    if (bg !== 'WHITE' && val !== null && cell.fontWeight === 'bold') {
-      hasBoldColored = true;
-      break;
-    }
-  }
 
-  var inFallbackColorBlock = false;
-  var lastColor = null;
-  for (var r2 = 1; r2 < numRows; r2++) {
-    var cell2 = grid[r2][prodCol];
-    if (!cell2) continue;
-    var val2 = cleanValue(cell2.value);
-    var bg2 = identifyBgColor(cell2.bgColor);
-
-    if (val2 && val2.indexOf('排') !== -1) {
-      inFallbackColorBlock = false;
+    if (val && val.indexOf('排') !== -1) {
+      inColorBlock = false;
       lastColor = null;
       continue;
     }
 
-    if (val2 === null) {
-      if (String(cell2.bgColor || '').toUpperCase().replace('#', '') === '1A3A6A') {
-        inFallbackColorBlock = false;
+    if (val === null) {
+      if (String(cell.bgColor || '').toUpperCase().replace('#', '') === '1A3A6A') {
+        inColorBlock = false;
         lastColor = null;
       }
       continue;
     }
 
-    if (bg2 === 'WHITE') continue;
+    if (bg === 'WHITE') continue;
 
-    if (hasBoldColored) {
-      if (cell2.fontWeight === 'bold') starts.push(r2);
-      continue;
-    }
-
-    if (!inFallbackColorBlock || bg2 !== lastColor) {
-      starts.push(r2);
-      inFallbackColorBlock = true;
-      lastColor = bg2;
+    if (!inColorBlock || bg !== lastColor) {
+      starts.push(r);
+      inColorBlock = true;
+      lastColor = bg;
     }
   }
 

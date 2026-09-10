@@ -1,0 +1,36 @@
+Opening /Users/titankou2002/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/倉庫全集/永安倉庫2025庫位表 (2).xlsx
+Sheets: ['A倉-說明', '測試區', '操作記錄', 'A-A區', 'A-B區', 'A-C區', 'A-D區', 'A-E區', 'A-F區', 'B倉-說明', 'B-A區', 'B-B區', 'B-C區', 'B-D區', 'B-E區', 'B-F區', 'B-G區', '「A-B區」的副本', '「A-F區」的副本', '「A-C區」的副本', '「A-D區」的副本', 'C倉-說明', 'C-A區', 'C-B區', 'C-C區', 'C-D區', 'C-E區', 'C-F區', 'C-G區', 'C-H區', '花磚']
+ skip A倉-說明
+ analyzing 測試區 241 x 87
+ analyzing 操作記錄 154 x 8
+ analyzing A-A區 501 x 78
+ analyzing A-B區 501 x 34
+ analyzing A-C區 503 x 57
+ analyzing A-D區 501 x 58
+ analyzing A-E區 501 x 40
+ analyzing A-F區 501 x 60
+ skip B倉-說明
+ analyzing B-A區 1000 x 73
+ analyzing B-B區 501 x 32
+ analyzing B-C區 1000 x 45
+ analyzing B-D區 501 x 74
+ analyzing B-E區 502 x 79
+ analyzing B-F區 1001 x 44
+ analyzing B-G區 253 x 87
+ analyzing 「A-B區」的副本 501 x 34
+ analyzing 「A-F區」的副本 501 x 60
+ analyzing 「A-C區」的副本 501 x 53
+ analyzing 「A-D區」的副本 501 x 54
+ skip C倉-說明
+ analyzing C-A區 501 x 50
+ analyzing C-B區 501 x 78
+ analyzing C-C區 501 x 72
+ analyzing C-D區 501 x 72
+ analyzing C-E區 502 x 72
+ analyzing C-F區 501 x 72
+ analyzing C-G區 501 x 32
+ analyzing C-H區 501 x 36
+ analyzing 花磚 501 x 84
+Wrote excel_qty_analysis.json
+AGG {'a_qty_only_sku_row': 595, 'c_both_rows': 2680, 'd_ambiguous_or_no_qty': 1712, 'b_qty_only_batch_row': 568}
+SAMPLE count 20

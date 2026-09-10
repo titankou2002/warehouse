@@ -1,3 +1,113 @@
+# 🚚 鈦傳速智慧倉儲管理系統：開發進度與狀態交接報告
+
+> **最後更新：2026-09-10**（棧板網格 UI @206–@227）  
+> 本文件給下一個接手的 AI／工程師：架構、已完成、待辦、部署方式。
+
+---
+
+## ⚡ 2026-09-10 現況快照（請先讀這段）
+
+### 線上部署
+- **Web App（固定 ID）**：https://script.google.com/macros/s/AKfycbxydQCzEV2HcpN2BriFKh8rNm8xmwdPuud-9sAvyEkd4qDvFtrkkzxHaibrGpf71Cpu/exec
+- **目前部署版本**：**@227**（重測請加 `?v=227&nocache=1`）
+- **Script ID**：`13kE5iGqfyJQDbkR_aVfpHMXq4VJpYd9DvZ6cj2vTFXktqaYZ65iZaMS9`
+- **Deploy ID**：`AKfycbxydQCzEV2HcpN2BriFKh8rNm8xmwdPuud-9sAvyEkd4qDvFtrkkzxHaibrGpf71Cpu`
+- **預設試算表（假倉）**：`1QR6xLZrdSUzhkCNwBhE5EUYpdv8GqkESfj3ELzNf59s`
+- **正式主表**：標記為損壞／勿當預設；切換用 `useFakeWarehouseSpreadsheet()` / `useMainWarehouseSpreadsheet()`
+- **實際線上 stack = GAS**，不是 Node。部署：`cd 倉庫全集 && clasp push -f && clasp deploy -i AKfycbxydQCzEV2HcpN2BriFKh8rNm8xmwdPuud-9sAvyEkd4qDvFtrkkzxHaibrGpf71Cpu -d "..."`  
+  （或 `python3 deploy.py`；近期迭代多直接 clasp）
+
+### 主要程式檔
+| 檔案 | 用途 |
+|------|------|
+| `warehouse_grid_ui.html` | 網格 UI 結構（搜尋欄、下拉、清除 ✕） |
+| `warehouse_grid_ui_js.html` | 搜尋／移動佇列／存檔／刪除／還原 |
+| `warehouse_grid_ui_css.html` | 樣式（**必須全在 `<style>…</style>` 內**，勿外洩） |
+| `WarehouseWriteback.gs` | `commitDepthOrders`、`undoMoves`、`deleteWarehousePallet`、搬移寫回 |
+| `WarehouseRead.gs` | `getSearchIndex`（輕量 + CacheService） |
+| `WarehouseParse.gs` | V170 解析（SKU set + `/^[A-Z]{2}\d{4,}/`） |
+| `ProductCatalog.gs` | 價目表；優先「編號價目」；欄「單片連結網址」→ `SinglePieceImage` |
+| `Main.gs` / `程式碼.js` | 入口／路由 |
+
+### 本輪已完成（@206 → @227）
+
+#### A. 移動／編輯 UX
+- 手機：長按移動優先、點擊編輯；載入遮罩；移動後重繪；取消時捲動跳位修正
+- 同區再點（例已在 B-G）**不重載**（除非 `force`）
+- 放置後立刻回總覽；多板重排進佇列，底部一次「寫入試算表」
+- 待寫入列文案：`N 筆移動尚未寫入試算表`／「寫入試算表」／「取消這些移動」（勿再用「丟棄」）
+- 存檔成功後清掉 pending bar
+- **堆疊順序**：`commitDepthOrders` 依前端最終順序寫回（index0 = Level1 = 視覺上層），散板放最上不會被後續 `movePallet` 舊 `destLevel` 壓到底
+- 還原：可選步數 1/2/3/5/10/全部
+- 「🗑 出貨刪除」：`deleteWarehousePallet`（編輯卡＋移動列）
+- 去掉內部重複縮放；標題列保留 －＋／還原
+
+#### B. 搜尋 UX（@220–@227）
+- 輸入 5 碼（例 `61250`）→ 編號下拉（公司色：高雅粉／漢樺黃／喜悅藍／安帝綠）
+- **選完整編號**：只填左欄＋開批號下拉，**不跳區、不置中**（`batchChosen=false`）
+- **選批號或「全部批號」**：才 `navigateToFirstSearchHit_()`＋整格黃框閃爍置中
+- 編號／批號旁 **✕** 清除
+- 粉紅區框僅在 `pickedSku` 完整選定後（避免半碼誤亮，例 B-F）
+- 下拉掛在原 input 下方（非底部大面板、非「搜到」碎標）
+- 搜尋：合併各區 zone cache＋伺服器輕量索引；CacheService `wms_search_light_v2_*`；背景預熱區快取加快（@227）
+
+#### C. 圖片
+- 單片圖：`ProductCatalog` 讀「編號價目表」欄 **「單片連結網址」** → `SinglePieceImage`
+- 切到含「編號價目」分頁後若資料不足則回傳 `{}`（@227 guard）
+
+#### D. 熱修
+- **@225/@226**：CSS 漏到 `</style>` 外（`move-bar-trash` 等變頁面文字）；`fail()` 語法壞掉整頁掛；boot `window.*` export 補齊
+- 數量顯示：`N箱` / `N片`
+
+### 箱／片 vs Excel（分析完成，**Parse 尚未改**）
+- Excel《永安倉庫2025庫位表》：表頭明確 **「編號/箱」「批號/片」**
+- 現行 Parse 啟發式「SKU 列空白或 0＋批號列有數 → 當箱」與表頭衝突，實測約 **288 筆**會把片翻成箱（例 GE2224：0箱/204片 → 誤成 204箱）
+- **建議**：跟表頭 → SKU 列=`box_qty`、批號列=`piece_qty`，加 `qty_source`/`confidence`；DataTable 為真相來源；拿掉該啟發式
+- 分析產物：`_wms221/excel_qty_strict.json` 等（在本機工作區）
+
+### 待用戶驗收（@227）
+- [ ] 選編號：只開批號下拉、不跳區
+- [ ] 選批號／全部批號：置中＋黃框
+- [ ] ✕ 清除編號／批號
+- [ ] 跨區搜尋（非僅本頁）
+- [ ] 單片圖（單片連結網址）
+- [ ] 載入／搜尋速度可接受
+- [ ] 多板移動＋寫入試算表後堆疊順序正確（散板上）
+
+### 仍開啟的待辦
+- [ ] **WarehouseParse 箱／片啟發式修正**（對齊 Excel 表頭）
+- [ ] 手機能否編輯「箱裝數」（先前回報不行）
+- [ ] 確認 V170 解析／搬移寫回／白底 SKU（舊待辦）
+- [ ] 正式主表修復後再切回正式倉
+- [ ] GitHub／CI 監控（用戶偏好，尚未接）
+
+### 重測網址
+`https://script.google.com/macros/s/AKfycbxydQCzEV2HcpN2BriFKh8rNm8xmwdPuud-9sAvyEkd4qDvFtrkkzxHaibrGpf71Cpu/exec?v=227&nocache=1`
+
+### 部署版本簡表（本輪）
+| Ver | 重點 |
+|-----|------|
+| @206–@215 | 移動／編輯／遮罩／undo／手機長按等穩定化 |
+| @216–@219 | 搜尋精簡、總覽標示、拿掉大結果面板 |
+| @220 | 5 碼→公司色 SKU→批號；黃框置中 |
+| @221 | 去重複 zoom；瘦 getSearchIndex；箱/片顯示 |
+| @222 | 下拉雛形；`commitDepthOrders` 堆疊寫回 |
+| @223 | 下拉貼 input；同區不重載；pending bar 清除；undo 步數 |
+| @224 | 點選填編號；完整 SKU 才粉框；寫入/取消文案；出貨刪除 |
+| @225–@226 | CSS 外洩＋`fail()` 語法熱修 |
+| **@227** | 選批號才導航；✕；搜尋快取合併；單片連結網址；預熱加速 |
+
+### 本機路徑
+`/Users/titankou2002/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/倉庫全集`
+
+---
+
+
+
+---
+
+# ⬇︎ 以下為 2026-09-10 以前歷史紀錄（勿刪）
+
 # 🚚 鈦傳速智慧倉儲管理系統：開發進度與狀態交接報告 (2026-06-06)
 
 本文件旨在為下一個接手的 AI 助理提供完整的專案現狀、架構說明、已完成工作以及當前待排查的問題，以便無縫銜接開發。
@@ -825,4 +935,173 @@ npm start
 - [ ] 測試移動功能（寫回試算表）
 - [ ] 把今天的修改 commit 推上 GitHub
 - [ ] `updateWarehousePallet`（編輯棧板資料）尚未實作
+
+---
+
+## 2026-08-21 修正紀錄：編號/批號判斷邏輯完整迭代（V164~V170）
+
+### 問題背景
+
+倉庫表格中，每個排段的資料結構是：
+- 排標題列（如「第一排」）
+- 編號行（SKU）＋箱數
+- 批號行（Batch）＋片數
+- 可能有中文備註行（如「不給出貨只能出樣」）
+- 棧板背景色：紅/黃交替（同義，散板/混板）、綠（專案庫存）、白（完整板）
+
+**核心問題**：程式需要判斷 prodCol 裡的每一行到底是「編號」還是「批號」，然後配對。
+
+### 第一次嘗試：rowIdxInDepth 位置計數（V154~V163，已放棄）
+
+在排標題後用 even/odd 計數：第0行=編號，第1行=批號，交替。
+
+**失敗原因**：中文備註行（如「不給出貨只能出樣」）出現在 prodCol 裡，被計入 rowIdxInDepth，導致後面所有配對偏移 1 格。
+
+```
+RR12012     0
+GA4 -A      3
+不給出貨只能出樣    >> 被判斷為編號（偏移了）
+RP12004     10
+CC4         >> 只有這個抓到批號
+RT12008     20
+GD6         >> 沒抓到批號（全部錯位）
+```
+
+### 第二次嘗試：純 SKU Set 判斷（V164~V166，已被 V170 取代）
+
+用產品目錄建 SKU Set，`skuSet[val]` 查到就是編號，查不到就是批號。
+
+**V164 失敗**：`.claspignore` 是白名單模式，`ProductCatalog.gs` 不在裡面 → `clasp push -f` 從未推送 → `buildSkuSet_ is not defined`。
+
+**V165 修復**：加入 `!ProductCatalog.gs` 到 `.claspignore`。
+
+**V166 失敗**：`loadCatalog_()` 只載入 `箱/板 > 0` 的 SKU → 安帝嘉等目錄中箱/板為空的 SKU 不會出現在 Set 裡 → 這些編號被當成批號。新增 `loadCatalogSkus_()` 繞過此限制。
+
+**但用戶反饋仍有問題**：RP36024/TA4 等仍抓不到批號。經查目錄資料確認 TA4/TB7 確實**不在任何目錄裡**，理論上應該正確。推測是其他問題導致。
+
+### 第三次嘗試：回歸 even/odd + 跳過中文（V167，已被 V170 取代）
+
+加了 `isDataValue_()` 判斷值是否含半形英數字元，中文備註不含 → 跳過不計數。
+
+**失敗原因**：大小寫不一致（`rp12005` vs `RP12005`）+ 舊產品（如 `LV12001`）不在目錄裡無法抓到。
+
+### 第四次嘗試：SKU Set + 格式 fallback（V168~V170，目前版本）
+
+結合目錄查詢與格式規則，目前最穩定方案。
+
+#### 核心判斷函式：`isSkuValue_(val, skuSet)`
+
+```javascript
+function isSkuValue_(val, skuSet) {
+  if (!val) return false;
+  var upper = String(val).trim().toUpperCase();   // 大寫正規化
+  if (skuSet[upper] === true) return true;         // 1. 查目錄
+  if (/^[A-Z]{2}\d{4,}/.test(upper)) return true; // 2. 格式 fallback
+  return false;
+}
+```
+
+**判定規則**：
+
+| 條件 | 結果 | 範例 |
+|---|---|---|
+| 在目錄 Set 裡（大寫正規化後） | 編號 ✓ | `rp12005` → `RP12005` → 在 Set → 編號 |
+| 格式：2字母 + 4+數字（開頭匹配即可） | 編號 ✓ | `LV1201` → 不在 Set 但格式對 → 編號 |
+| 格式：2字母 + 4+數字 + 後綴 | 編號 ✓ | `RR12012-S` → 開頭符合 → 編號 |
+| 以上都不符合 | 批號 | `TA4`（1位數字）、`GC4`、`AA6`、`B50`、`/03` |
+
+**為什麼格式 fallback 用 `^[A-Z]{2}\d{4,}` 而不是更嚴格的匹配**：
+
+三個目錄的 SKU 格式全部是 2字母+多位數字：
+- 高雅瓷：`AA10001`, `RP36024`, `VS612105`（6~8 字元）
+- 喜悅納：`BK72801`, `FC78601`, `KP3682`（5~8 字元）
+- 安帝嘉：`SL10011`, `VM1002`, `NB61293`（5~8 字元）
+- 漢樺：純數字如 `303094`（已在目錄 Set 裡）
+
+而批號全部是短代碼：`TA4`, `TB7`, `GC4`, `AA6`, `AB4`, `B50`（3~4 字元，數字部分只有 1~2 位）
+
+所以 `^[A-Z]{2}\d{4,}` 能有效區分：
+- 編號：2字母 + **4位以上**數字 → 匹配
+- 批號：2字母 + **1~2位**數字 → 不匹配
+- 純數字編號（漢樺）：在目錄 Set 裡 → 匹配
+- 有後綴的編號（如 `RR12012-S`）：開頭符合 → 匹配
+
+### 產品目錄資料結構確認
+
+經下載三張 xlsx 直接檢查：
+
+| 目錄 | 分頁 | 編號欄位 | SKU 數量 | 格式 |
+|---|---|---|---|---|
+| 高雅瓷 | 編號價目表 | 編號 (col F) | 630 | 2字母+5~6位數字 |
+| 喜悅納 | 編號價目表 | 編號 (col F) | 1260 | 2字母+4~6位數字 |
+| 安帝嘉 | 編號價目表 | 編號 (col F) | 1480 | 2字母+4~6位數字 |
+| 漢樺 | 編號價目表 | 漢樺編號 (col A) | ~3500 | 純數字 |
+
+**確認**：TA4, TB7, TB6, TC6 等短代碼**完全不在任何目錄的編號欄位裡**。
+
+### 部署版本歷史
+
+| 版本 | 內容 | 狀態 |
+|---|---|---|
+| V163 | rowIdxInDepth 塊內逐行++（舊方案） | ❌ 被中文備註干擾 |
+| V164 | SKU Set，但 .claspignore 遺漏 ProductCatalog.gs | ❌ `buildSkuSet_ is not defined` |
+| V165 | 修復 .claspignore | ⚠️ `loadCatalog_` 只載箱/板>0 |
+| V166 | 新增 `loadCatalogSkus_` 載入所有 SKU | ⚠️ 大小寫+舊產品問題 |
+| V167 | 回歸 even/odd + 跳過中文 | ❌ 大小寫+舊產品問題 |
+| V168 | 切回 SKU Set（移除 even/odd） | ⚠️ 大小寫問題 |
+| V169 | `isSkuValue_`：大寫正規化 + 格式 fallback | ⚠️ `-S` 後綴不匹配 |
+| **V170** | 格式 fallback 改為 `^[A-Z]{2}\d{4,}`（開頭匹配） | **目前版本** |
+
+### 變更檔案清單
+
+| 檔案 | 變更內容 |
+|---|---|
+| `ProductCatalog.gs` | 新增 `loadCatalogSkus_()`（載入所有 SKU 不篩箱/板）+ `buildSkuSet_()` |
+| `WarehouseParse.gs` | `parseWarehouseGrid()` 用 `isSkuValue_(val, skuSet)` 判斷；新增 `isSkuValue_()`、`isDataValue_()` 輔助函式 |
+| `.claspignore` | 加入 `!ProductCatalog.gs` |
+| `Main.gs` | 加入 `?action=debugskuset` debug endpoint（顯示 SKU Set 內容） |
+
+### 目前的判斷流程圖
+
+```
+掃描每行 valProd:
+  ├─ 空值 → skip
+  ├─ 含「排」→ 設為排標題，重置 pendingSkuRow
+  ├─ 分隔行（#1A3A6A）→ skip
+  ├─ 白底:
+  │   ├─ isSkuValue_(val, skuSet) → 獨立 pallet（白底無批號）
+  │   └─ otherwise → skip
+  └─ 彩色底:
+      ├─ 收集同色連續段 blockRows
+      ├─ 逐行判斷:
+      │   ├─ isSkuValue_(val, skuSet) → 遇到編號
+      │   │   ├─ pendingSkuRow != null → emit orphan 編號
+      │   │   └─ 設 pendingSkuRow = 此行
+      │   └─ otherwise → 遇到批號
+      │       └─ emit(pendingSkuRow, 此行), pendingSkuRow = null
+      └─ blockRows 結束
+
+isSkuValue_(val, skuSet):
+  1. upper = val.toUpperCase()
+  2. skuSet[upper] == true → 編號（在目錄裡）
+  3. /^[A-Z]{2}\d{4,}/.test(upper) → 編號（格式符合）
+  4. 否則 → 批號
+```
+
+### 待辦
+
+- [ ] 用戶確認 V170 解析結果正確
+- [ ] 測試搬移/寫回功能在新解析邏輯下正常
+- [ ] 確認白底 pallet 的編號判斷正確
+
+### 關鍵技術備註
+
+- **實際部署系統是 GAS**（Google Apps Script），不是 Node.js。`server/` 目錄下的 Node.js 改寫是本地開發用，不影響線上。
+- GAS 部署 ID：`AKfycbxydQCzEV2HcpN2BriFKh8rNm8xmwdPuud-9sAvyEkd4qDvFtrkkzxHaibrGpf71Cpu`
+- 實際讀取的試算表（副本）：`1QR6xLZrdSUzhkCNwBhE5EUYpdv8GqkESfj3ELzNf59s`
+- 產品目錄 Google Sheets：
+  - 安帝嘉 `16QNID9hLs2K1iy_ePo7MxYxhW4kpDrDlfEIZ2p83ximo` gid=980246579
+  - 喜悅納 `1uFKKWBfulg-GmCbJsSomimT5LW5r0N2w28rubrPveTA` gid=1714485893
+  - 漢樺 `1OnLLqn3zUp-AzoD6ds95lZ01XxwOut8bt8SCHYLl0hc` gid=2120108225
+  - 高雅瓷 `1G5q-GixMWSdJJeF8ZiXWMOfrx4FMobER25jNc8m4Zds` gid=1692526565
 

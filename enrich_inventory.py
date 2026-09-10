@@ -4,13 +4,13 @@ import os
 import re
 
 # File paths
-warehouse_json_path = "/Users/bigt_mbair/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/倉庫全集/parsed_inventory.json"
-enriched_json_path = "/Users/bigt_mbair/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/倉庫全集/parsed_inventory_enriched.json"
+warehouse_json_path = "/Users/titankou2002/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/倉庫全集/parsed_inventory.json"
+enriched_json_path = "/Users/titankou2002/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/倉庫全集/parsed_inventory_enriched.json"
 
 company_files = {
-    "高雅瓷": "/Users/bigt_mbair/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/客戶版機器人/高雅瓷內部管理.xlsx",
-    "安帝嘉": "/Users/bigt_mbair/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/B-T資料/雲端共用試算表/公司資料/安帝嘉-內部管理.xlsx",
-    "喜悅納": "/Users/bigt_mbair/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/B-T資料/雲端共用試算表/公司資料/喜悅納-內部管理.xlsx"
+    "高雅瓷": "/Users/titankou2002/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/倉庫全集/高雅瓷內部管理 (4).xlsx",
+    "安帝嘉": "/Users/titankou2002/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/倉庫全集/安帝嘉-內部管理系統.xlsx",
+    "喜悅納": "/Users/titankou2002/Library/CloudStorage/GoogleDrive-titankou2002@gmail.com/我的雲端硬碟/BT/Antigravity/倉庫全集/喜悅納-內部管理 (1).xlsx"
 }
 
 def clean_str(val):
@@ -243,10 +243,18 @@ def main():
                     
             print(f"  Loaded {len(stock_database)} stock records.")
 
-    # 3. Enrich the warehouse pallets
+    # Pre-build normalized lookup map
+    norm_price_db = {}
+    for k, records in price_database.items():
+        if not k:
+            continue
+        nk = re.sub(r'[^A-Z0-9]', '', str(k).upper())
+        if nk and nk not in norm_price_db:
+            norm_price_db[nk] = records
+
     enriched_pallets = []
     skipped_metadata_count = 0
-    
+
     for p in warehouse_pallets:
         sku = clean_str(p.get("SKU"))
         batch = clean_str(p.get("Batch"))
@@ -270,14 +278,22 @@ def main():
             "Branches": [] # List of company-specific details
         }
         
-        # Match by standard SKU or Hanhwa code
+        # Match by standard SKU, Hanhwa code, normalized SKU, or prefix
         clean_sku_code = clean_hanhwa_code(sku)
+        norm_sku = re.sub(r'[^A-Z0-9]', '', sku.upper())
         p_records = None
         
         if sku in price_database:
             p_records = price_database[sku]
         elif clean_sku_code in price_database:
             p_records = price_database[clean_sku_code]
+        elif norm_sku in norm_price_db:
+            p_records = norm_price_db[norm_sku]
+        elif norm_sku:
+            for nk, recs in norm_price_db.items():
+                if len(nk) >= 4 and (norm_sku.startswith(nk) or nk.startswith(norm_sku)):
+                    p_records = recs
+                    break
             
         if p_records:
             # Use the first record to fill out shared product metadata

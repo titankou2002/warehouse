@@ -1,4 +1,1749 @@
-<script>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <style>
+   
+  .stack, .stack *, .cell-btn, .cell-btn *,
+  .overview-table, .overview-table * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  :root {
+    --bg: #07101d;
+    --panel: #0f1728;
+    --panel2: #131f36;
+    --line: #2a3858;
+    --text: #eef4ff;
+    --muted: #90a1bd;
+    --blue: #68a8ff;
+    --good: #6de2a1;
+    --bad: #ff7f7f;
+    --red: #f04242;
+    --yellow: #f7e35f;
+    --green: #2ae25f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 20% -10%, rgba(49, 92, 164, .38), transparent 34%),
+      radial-gradient(circle at 80% 0%, rgba(28, 60, 120, .28), transparent 32%),
+      linear-gradient(180deg, #06101c 0%, #040913 100%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "PingFang TC", sans-serif;
+  }
+  .app-shell { padding: 18px; }
+  .app-panel {
+    width: min(1720px, 100%);
+    margin: 0 auto;
+    border: 1px solid #23324f;
+    background: linear-gradient(180deg, rgba(12, 20, 35, .95), rgba(6, 11, 21, .98));
+    border-radius: 28px;
+    padding: 24px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .38);
+  }
+  .hero, .modal-head, .topbar, .action-bar, .detail-header, .overview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .hero { padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .eyebrow { color: var(--muted); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; }
+  h1 { margin: 4px 0 6px; font-size: 34px; }
+  .hero p, .section-subtitle { margin: 0; color: var(--muted); }
+  .hero-links { display: flex; flex-wrap: wrap; gap: 8px; }
+  .hero-links a, .ghost-btn, .primary-btn {
+    border-radius: 999px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    background: #101b31;
+    color: var(--text);
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .primary-btn { border-color: #4f90f1; background: #245ec6; }
+  .ghost-btn { background: #11192c; }
+  .topbar { padding: 18px 0; align-items: stretch; }
+  .status {
+    flex: 1;
+    min-height: 52px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: #10192d;
+    font-weight: 700;
+  }
+  .status.ok { color: var(--good); border-color: rgba(109, 226, 161, .35); }
+  .status.bad { color: var(--bad); border-color: rgba(255, 127, 127, .45); white-space: pre-wrap; }
+  .search-dual { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: min(520px, 100%); }
+  .search {
+    width: 100%;
+    height: 52px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: #111b31;
+    color: var(--text);
+    padding: 0 16px;
+    font-size: 16px;
+    outline: none;
+  }
+  .search:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(104, 168, 255, .14); }
+  .section-title { font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .zone-chips, .search-results { display: flex; gap: 10px; overflow: auto; }
+  .zone-chips { padding: 12px 0 18px; }
+  .zone-chip {
+    flex: 0 0 auto;
+    border: 1px solid var(--line);
+    background: #11192d;
+    color: var(--text);
+    border-radius: 18px;
+    cursor: pointer;
+    padding: 10px 14px;
+  }
+  .zone-chip.active { border-color: #49d17d; background: #173a2a; }
+  .zone-chip.hit { border-color: rgba(73,209,125,.55); box-shadow: 0 0 0 1px rgba(73,209,125,.18), 0 0 18px rgba(73,209,125,.18); }
+  .zone-chip.pulse, .cell-btn.pulse, .item-chip.pulse { animation: pulseGlow 1.6s ease-in-out infinite; }
+  .zone-chip span { color: var(--muted); margin-left: 6px; }
+   
+  .zone-sync-dot {
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    margin-left: 4px;
+    vertical-align: middle;
+    font-style: normal;
+  }
+  .zone-sync-dot.syncing {
+    background: #68a8ff;
+    animation: zoneSyncPulse 0.9s ease-in-out infinite;
+  }
+  .zone-sync-dot.stale {
+    background: rgba(255,200,80,.45);
+  }
+  @keyframes zoneSyncPulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.25; }
+  }
+  .overview-panel, .detail-panel, .search-wrap {
+    border: 1px solid var(--line);
+    background: rgba(14, 22, 40, .84);
+    border-radius: 22px;
+    padding: 16px;
+  }
+  .overview-panel { margin-top: 4px; }
+  .overview-head { align-items: flex-start; margin-bottom: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); }
+  .overview-scroll {
+    overflow: auto;
+    border: 1px solid #263655;
+    border-radius: 18px;
+    background: #081120;
+  }
+  .overview-table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .overview-table th,
+  .overview-table td {
+    border-right: 1px solid rgba(255,255,255,.06);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    vertical-align: top;
+  }
+  .overview-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #12203a;
+    min-width: 122px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+  .corner-cell {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    min-width: 98px;
+    background: #13213e;
+  }
+  .slot-head strong { display:block; font-size: 28px; line-height: 1; }
+  .slot-head small { display: block; color: var(--muted); margin-top: 4px; font-weight: 600; font-size: 11px; }
+  .depth-head {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 98px;
+    background: #101a2f;
+    padding: 10px 8px;
+  }
+  .depth-head strong { display: block; font-size: 15px; }
+  .depth-head small { color: var(--muted); font-size: 11px; }
+  .overview-cell {
+    min-width: 168px;
+    min-height: 175px;
+    background: #0e1729;
+    padding: 8px;
+  }
+  .cell-empty {
+    min-height: 159px;
+    border-radius: 12px;
+    border: 1px dashed rgba(255,255,255,.07);
+    background: rgba(255,255,255,.02);
+  }
+  .cell-btn {
+    width: 100%;
+    min-height: 159px;
+    text-align: left;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.08);
+    padding: 8px;
+    cursor: pointer;
+    color: #eaf1ff;
+    background: linear-gradient(180deg, #1a2640, #10192d);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, .18);
+  }
+  .cell-btn.active { outline: 3px solid #49d17d; outline-offset: 2px; }
+  .cell-btn.hit { box-shadow: 0 0 0 3px rgba(73, 209, 125, .28), 0 10px 22px rgba(0, 0, 0, .18); }
+  .cell-lines {
+    display: grid;
+    gap: 4px;
+  }
+  .cell-line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+    padding: 5px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.07);
+    background: rgba(255,255,255,.03);
+  }
+  .cell-line.hit {
+    border-color: #49d17d;
+    box-shadow: inset 0 0 0 2px rgba(73, 209, 125, .28);
+    background: rgba(73,209,125,.12);
+  }
+  .cell-line.red-pallet {
+    border-color: rgba(255, 68, 68, 0.45);
+    background: rgba(255, 68, 68, 0.14);
+  }
+  .cell-line.yellow-pallet {
+    border-color: rgba(255, 200, 0, 0.45);
+    background: rgba(255, 200, 0, 0.14);
+  }
+  .cell-line.green-pallet {
+    border-color: rgba(0, 176, 80, 0.45);
+    background: rgba(0, 176, 80, 0.14);
+  }
+  .status-tag {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 4px;
+    line-height: 1.2;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .status-tag.red {
+    background: #ff4444;
+    color: #ffffff;
+  }
+  .status-tag.yellow {
+    background: #d4a000;
+    color: #000000;
+  }
+  .status-tag.green {
+    background: #00b050;
+    color: #ffffff;
+  }
+  .cell-main {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+  .cell-sku {
+    font-weight: 900;
+    font-size: 14px;
+    line-height: 1.05;
+    word-break: break-word;
+    color: #eef4ff;
+  }
+  .cell-batch-badge {
+    flex: 0 0 auto;
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 800;
+    color: #7ff0a6;
+    border: 1px solid rgba(73,209,125,.28);
+    background: rgba(73,209,125,.08);
+    border-radius: 999px;
+    padding: 2px 6px;
+  }
+  .cell-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #9eb3d9;
+  }
+  .cf-loc { white-space: nowrap; }
+  .cf-val { color: #fff; font-weight: 900; }
+  .cf-lbl { color: #c9952a; font-weight: 800; }
+  .detail-panel { margin-top: 16px; position: relative; }
+  .cell-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+  .item-chip { border: 1px solid var(--line); background: #11192d; color: var(--text); border-radius: 14px; padding: 12px; text-align: left; cursor: pointer; }
+  .item-chip.active { border-color: #49d17d; box-shadow: 0 0 0 2px rgba(73,209,125,.18); }
+  .item-chip-top, .item-chip-bottom { display:flex; justify-content:space-between; gap:8px; }
+  .item-chip-top strong { font-size: 16px; }
+  .item-chip-batch { color: var(--yellow); font-weight:800; }
+  .item-chip-bottom { margin-top: 8px; color: var(--muted); font-size: 12px; font-weight:700; }
+  .item-detail { margin-top: 12px; border: 1px solid #263655; border-radius: 18px; background: #0d172a; padding: 16px; }
+  .item-detail.empty { color: var(--muted); display:grid; place-items:center; min-height: 120px; }
+  .detail-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+  .detail-box { border:1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 10px 12px; background: rgba(255,255,255,.03); }
+  .detail-box small { display:block; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .detail-box strong { display:block; font-size: 15px; word-break: break-word; }
+  .detail-panel.hidden { display: none; }
+  .cross-section {
+    min-height: 420px;
+    border-radius: 20px;
+    border: 1px solid #263655;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)),
+      #0a1221;
+    padding: 18px;
+    overflow: auto;
+    margin-top: 12px;
+  }
+  .cross-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(132px, 1fr);
+    gap: 14px;
+    align-items: end;
+    min-height: 360px;
+  }
+  .depth-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 10px;
+    min-height: 340px;
+  }
+  .depth-col.selected .stack {
+    border-color: rgba(104, 168, 255, .5);
+    box-shadow: inset 0 0 0 2px rgba(104, 168, 255, .18);
+  }
+  .depth-col.selected .depth-col-head {
+    color: #d7e7ff;
+  }
+  .depth-col-head {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+   
+  .depth-cap {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    font-size: 11px;
+    background: rgba(255,255,255,.1);
+    color: var(--muted);
+  }
+  .depth-cap.cap-warn {
+    background: rgba(255,200,50,.18);
+    color: #ffc832;
+  }
+  .depth-cap.cap-full {
+    background: rgba(240,66,66,.22);
+    color: #ff8f8f;
+  }
+   
+  .depth-col.depth-full .depth-col-head {
+    color: #ffc0a0;
+  }
+  .stack {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: flex-end;
+    border: 1px dashed rgba(255,255,255,.08);
+    border-radius: 18px;
+    padding: 14px 10px;
+    background: rgba(18, 27, 46, .55);
+  }
+  .pallet {
+    border-radius: 12px;
+    padding: 9px 10px 8px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: #142137;
+    color: #e5eefb;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+    transition: all .15s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .pallet.white {
+    border-left: 5px solid #7a9bb5;
+    background: #16243d;
+    color: #e5eefb;
+  }
+  .pallet.red {
+    border-left: 5px solid #ff4444;
+    background: #231926;
+    color: #ffffff;
+  }
+  .pallet.yellow {
+    border-left: 5px solid #ffd700;
+    background: #23221c;
+    color: #ffffff;
+  }
+  .pallet.green {
+    border-left: 5px solid #00b050;
+    background: #132724;
+    color: #ffffff;
+  }
+  .pallet.bluefont { color: #579aff; }
+  .pallet.selected { outline: 3px solid #49d17d; outline-offset: 2px; }
+
+  @keyframes slideLeftToRight {
+    0% {
+      opacity: 0.2;
+      transform: translateX(-100px) scale(0.88);
+      box-shadow: -12px 0 25px rgba(73, 209, 125, 0.7);
+    }
+    50% {
+      opacity: 0.85;
+      transform: translateX(12px) scale(1.05);
+      box-shadow: 0 0 30px rgba(73, 209, 125, 0.9);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+      box-shadow: 0 0 0 0 rgba(73, 209, 125, 0.9), 0 0 16px rgba(73, 209, 125, 0.8);
+    }
+  }
+
+  @keyframes movedPulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(73, 209, 125, 0.9), 0 0 16px rgba(73, 209, 125, 0.8);
+      border-color: #49d17d !important;
+      transform: scale(1.03);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(73, 209, 125, 0.4), 0 0 26px rgba(73, 209, 125, 1);
+      border-color: #79f7ab !important;
+      transform: scale(1.05);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(73, 209, 125, 0.9), 0 0 16px rgba(73, 209, 125, 0.8);
+      border-color: #49d17d !important;
+      transform: scale(1.03);
+    }
+  }
+  .pallet.just-moved, .cell-line.just-moved, .item-chip.just-moved {
+    animation: slideLeftToRight 0.65s cubic-bezier(0.16, 1, 0.3, 1), movedPulse 1.2s infinite ease-in-out 0.65s !important;
+    border-color: #49d17d !important;
+    border-width: 2px !important;
+    z-index: 10 !important;
+  }
+  .pallet-sku {
+    font-weight: 900;
+    font-size: 12px;
+    line-height: 1.2;
+     
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+  }
+  .pallet-sku .status-tag { display: inline; font-size: 9px; }
+  .pallet-meta {
+    display: flex; justify-content: space-between; gap: 4px; margin-top: 3px;
+    font-size: 10px; font-weight: 800; flex-wrap: wrap;
+  }
+  .pallet-meta > span { min-width: 0; }
+  .pallet-card-time { font-size: 9px; opacity: .85; }
+  .pallet {
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: visible;
+  }
+  .depth-col { min-width: 0; }
+  .stack { min-width: 0; overflow: visible; }
+  .cross-grid {
+     
+    --cross-col-min: 132px;
+    grid-auto-columns: minmax(var(--cross-col-min), 1fr);
+  }
+  .cross-zoom-controls {
+    display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+  }
+  .cross-zoom-controls button {
+    background: #131f36; border: 1px solid #2a3858; color: #a8ccff;
+    border-radius: 8px; min-width: 36px; min-height: 36px;
+    font-size: 16px; font-weight: 900; cursor: pointer; line-height: 1;
+  }
+  .floor { margin-top: 12px; text-align: center; color: var(--muted); font-size: 12px; }
+  .cross-slot-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: .06em;
+    margin-bottom: 10px;
+    padding: 4px 6px;
+  }
+  .cross-slot-banner strong {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 900;
+    margin: 0 2px;
+  }
+  .banner-loc { flex: 1; }
+  .banner-undo-redo { display: flex; gap: 6px; flex-shrink: 0; }
+  .banner-undo-btn, .banner-redo-btn {
+    background: #131f36;
+    border: 1px solid #2a3858;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    white-space: nowrap;
+  }
+  .banner-undo-btn:not(.disabled):hover, .banner-redo-btn:not(.disabled):hover {
+    background: #1a2f4a;
+    border-color: #4a7aaa;
+    color: #a8ccff;
+  }
+  .banner-undo-btn:not(.disabled), .banner-redo-btn:not(.disabled) {
+    color: #a8ccff;
+    border-color: #3a5878;
+  }
+  .banner-undo-btn.disabled, .banner-redo-btn.disabled {
+    opacity: .3;
+    cursor: default;
+  }
+  .banner-undo-btn .step-count, .banner-redo-btn .step-count,
+  .undo-btn .step-count, .redo-btn .step-count {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: #2a3858;
+    color: #a8ccff;
+    font-size: 10px;
+    font-weight: 800;
+  }
+  .banner-undo-btn.busy, .banner-redo-btn.busy,
+  .undo-btn.busy, .redo-btn.busy {
+    pointer-events: none;
+    opacity: .85;
+  }
+  .banner-undo-btn.busy .btn-icon, .banner-redo-btn.busy .btn-icon,
+  .undo-btn.busy .btn-icon, .redo-btn.busy .btn-icon {
+    display: inline-block;
+    animation: spin360 .7s linear infinite;
+  }
+  @keyframes spin360 {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .search-wrap { margin-bottom: 16px; }
+  .search-wrap.hidden, .modal.hidden, .detail-backdrop.hidden { display: none; }
+  .search-results { padding-top: 12px; }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(73,209,125,.12), 0 0 0 rgba(73,209,125,0); }
+    50% { box-shadow: 0 0 0 1px rgba(73,209,125,.38), 0 0 24px rgba(73,209,125,.28); }
+  }
+  .search-card {
+    flex: 0 0 auto;
+    min-width: 190px;
+    max-width: 220px;
+    border: 2px solid var(--line);
+    border-radius: 14px;
+    background: #0f1828;
+    padding: 10px 12px;
+    cursor: pointer;
+    color: var(--text);
+    text-align: left;
+  }
+  .search-card.co-antiga { border-color: rgba(74,222,128,.65); }
+  .search-card.co-xina   { border-color: rgba(96,165,250,.65); }
+  .search-card.co-koya   { border-color: rgba(249,168,212,.65); }
+  .search-card.co-hanhwa { border-color: rgba(250,204,21,.65); }
+  .sc-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .sc-sku { font-size: 17px; font-weight: 900; }
+  .sc-batch { font-size: 11px; color: var(--yellow); font-weight: 800; }
+  .sc-loc { font-size: 11px; color: var(--red); font-weight: 700; margin-top: 5px; }
+  .sc-qty { display: flex; gap: 10px; margin-top: 6px; }
+  .sc-box { font-size: 18px; font-weight: 900; color: #68c8ff; }
+  .sc-piece { font-size: 18px; font-weight: 900; color: #7ff0a6; }
+  .sc-box small, .sc-piece small { font-size: 11px; margin-left: 2px; opacity: .75; }
+  .empty {
+    display: grid;
+    place-items: center;
+    min-height: 220px;
+    color: var(--muted);
+    border: 1px dashed rgba(255,255,255,.1);
+    border-radius: 18px;
+  }
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 13, .72);
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    z-index: 40;
+  }
+  .compact-card {
+    position: relative;
+    width: min(420px, 92vw) !important;
+    max-width: 92vw !important;
+    padding: 12px 14px !important;
+    border-radius: 18px !important;
+    background: #0b1322 !important;
+    border: 1px solid #233452 !important;
+    box-shadow: 0 16px 50px rgba(0,0,0,0.6) !important;
+  }
+  .modal-head-sm { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding-right: 30px; }
+  .modal-title-text { font-size: 14px; font-weight: 800; color: #fff; }
+  .modal-subtitle-text { font-size: 11px; color: var(--muted); }
+
+  .form-grid-compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 8px;
+  }
+  .form-grid-compact label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .form-grid-compact input, .form-grid-compact select {
+    height: 32px !important;
+    border-radius: 8px !important;
+    border: 1px solid #253754 !important;
+    background: #101a2d !important;
+    color: var(--text) !important;
+    padding: 0 8px !important;
+    font-size: 13px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .form-grid-compact input[readonly] {
+    opacity: 0.75;
+    background: #0a1220 !important;
+  }
+  .three-col-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.2fr;
+    gap: 6px;
+  }
+  .action-bar-compact {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .ghost-btn-sm, .primary-btn-sm {
+    border-radius: 10px;
+    padding: 5px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid var(--line);
+  }
+  .ghost-btn-sm { background: #111a2d; color: var(--text); }
+  .primary-btn-sm { background: #245ec6; border-color: #4f90f1; color: #fff; }
+  .modal-close-x {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: #111a2f;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .form-grid label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+  .form-grid input, .form-grid select {
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: #111a2f;
+    color: var(--text);
+    padding: 0 12px;
+    font-size: 15px;
+  }
+  .form-grid .wide { grid-column: 1 / -1; }
+  .hint-box {
+    margin-top: 16px;
+    border: 1px solid #2d466f;
+    background: #0d1b32;
+    color: #b9d8ff;
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+   
+  .qty-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .qty-label {
+    display: grid;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .qty-label input {
+    height: 56px !important;
+    font-size: 22px !important;
+    font-weight: 900 !important;
+    border-radius: 14px !important;
+    text-align: center !important;
+    padding: 0 12px !important;
+  }
+  .pz-hint {
+    margin-left: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #68c8ff;
+    opacity: .85;
+  }
+  .action-bar { margin-top: 16px; justify-content: flex-end; }
+  .detail-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 13, .4);
+    z-index: 18;
+  }
+   
+  .item-summary { padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .item-sum-row1 { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .item-sum-sku { font-size: 22px; font-weight: 900; color: var(--text); }
+  .item-sum-batch { display: inline-flex; align-items: baseline; gap: 6px; font-size: 22px; font-weight: 900; color: var(--yellow); }
+  .batch-label { font-size: 11px; font-weight: 800; color: var(--yellow); letter-spacing: .1em; opacity: .7; }
+  .item-sum-qty { display: flex; align-items: flex-end; gap: 8px; margin-top: 10px; }
+  .qty-box { font-size: 32px; font-weight: 900; color: #68c8ff; line-height: 1; }
+  .qty-piece { font-size: 32px; font-weight: 900; color: #7ff0a6; line-height: 1; }
+  .qty-box small, .qty-piece small { font-size: 14px; font-weight: 700; margin-left: 3px; opacity: .75; }
+  .item-sum-loc { margin-top: 8px; font-size: 13px; font-weight: 800; color: var(--red); letter-spacing: .04em; }
+   
+  .item-sum-loc-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; flex-wrap: wrap; gap: 4px; }
+  .loc-code { font-size: 14px; font-weight: 700; }
+  .loc-val { color: #fff; font-size: 16px; font-weight: 900; }
+  .loc-label { color: #c9952a; font-size: 12px; font-weight: 800; }
+  .loc-sep { color: #c9952a; font-size: 13px; margin: 0 1px; }
+  #slotTitle:empty { display: none; }
+  .loc-pz { font-size: 12px; font-weight: 800; color: var(--muted); white-space: nowrap; }
+
+   
+  .qty-input {
+    width: 72px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid rgba(255,255,255,.18);
+    border-radius: 0;
+    color: inherit;
+    font-size: 32px;
+    font-weight: 900;
+    line-height: 1;
+    padding: 0 2px 2px;
+    outline: none;
+    -moz-appearance: textfield;
+    text-align: left;
+  }
+  .qty-input::-webkit-inner-spin-button,
+  .qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .qty-input:focus { border-bottom-color: var(--blue); }
+  .qty-box-input { color: #68c8ff; }
+  .qty-piece-input { color: #7ff0a6; }
+  .qty-save-btn {
+    margin-left: auto;
+    align-self: center;
+    background: #162e52;
+    border: 1px solid #4f90f1;
+    border-radius: 10px;
+    padding: 6px 14px;
+    color: #a8ccff;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .qty-save-btn:active { background: #245ec6; }
+
+   
+  .chip-pz { font-size: 10px; color: var(--muted); font-weight: 600; }
+   
+  .qty-status {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 800;
+    border-radius: 6px;
+    padding: 1px 5px;
+    margin-left: 4px;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  .qty-status.reported { background: rgba(240,66,66,.18); color: #ff8f8f; }
+  .qty-status.pending  { background: rgba(73,209,125,.18); color: #49d17d; }
+  .qty-status.nosys    { background: rgba(247,227,95,.18); color: #f7e35f; }
+
+   
+  .detail-box-wide { grid-column: 1 / -1; }
+
+  .detail-toggle {
+    margin-top: 12px;
+    width: 100%;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: #11192d;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: center;
+  }
+  .detail-toggle:hover { border-color: var(--blue); color: var(--text); }
+  .item-specs { margin-top: 12px; }
+  .item-specs.hidden { display: none; }
+  .item-img-wrap { text-align: center; margin-bottom: 14px; }
+  .item-img { max-width: 100%; max-height: 220px; border-radius: 14px; border: 1px solid var(--line); object-fit: contain; }
+
+   
+  .zoom-controls { display: flex; gap: 6px; flex-shrink: 0; }
+  .zoom-btn { padding: 8px 16px; font-size: 18px; font-weight: 900; min-width: 44px; }
+
+   
+  .warehouse-map-wrap {
+    flex: 0 1 auto;
+    border: 1px solid #1a2a42;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #080f1c;
+  }
+  .warehouse-map-wrap svg { display: block; }
+   
+  .detail-map {
+    flex: 1 1 auto;
+    min-width: 140px;
+    align-self: flex-start;
+  }
+  .detail-header {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+    padding-right: 36px;
+  }
+  .detail-header-left {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+   
+  .detail-close-x {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: #11192d;
+    border: 1px solid #2a3858;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    z-index: 2;
+  }
+  .detail-close-x:active { background: #1e2e46; color: var(--text); }
+  @media (max-width: 720px) {
+    .detail-map { min-width: 120px; }
+  }
+
+   
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+   
+  h1 { margin: 0; font-size: 22px; padding: 12px 0 4px; }
+  .hero { padding-bottom: 10px; border-bottom: 1px solid var(--line); align-items: flex-start; }
+  .ver-tag { font-size: 13px; font-weight: 600; color: var(--muted); vertical-align: middle; }
+  .cache-row { display: flex; align-items: center; gap: 6px; }
+  .operator-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .operator-label { font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+  .operator-input { background: #0d1929; border: 1px solid #1e2e44; border-radius: 6px; color: #e5eefb; font-size: 12px; padding: 3px 8px; width: 120px; outline: none; }
+  .operator-input:focus { border-color: #49d17d; }
+  .operator-input.warn { border-color: #ffb347; }
+  .cache-info { font-size: 12px; font-weight: 700; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .cache-info.ok { color: var(--good); }
+  .cache-info.loading { color: var(--blue); }
+  .cache-info.loading::before {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(104, 168, 255, 0.25);
+    border-top-color: #68a8ff;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    flex-shrink: 0;
+  }
+  .cache-info.bad { color: var(--bad); }
+  .cache-info.settled { color: var(--muted); }
+  .cache-refresh { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; color: var(--muted); line-height: 1; display: inline-block; transition: transform 0.2s ease; }
+  .cache-refresh.spinning { animation: spin 1s linear infinite; pointer-events: none; opacity: 0.85; }
+
+   
+  .overview-panel { position: relative; }
+  .grid-loading-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+    background: rgba(7, 16, 29, 0.88);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    z-index: 10050 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: all;
+  }
+  .grid-loading-overlay.hidden {
+    display: none !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+  .spinner-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 24px 32px;
+    background: rgba(15, 23, 40, 0.95);
+    border: 1px solid rgba(104, 168, 255, 0.25);
+    border-radius: 20px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+  }
+  .spinner-ring {
+    width: 38px;
+    height: 38px;
+    border: 3px solid rgba(104, 168, 255, 0.2);
+    border-top-color: #68a8ff;
+    border-right-color: #49d17d;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .spinner-text {
+    font-size: 14px;
+    font-weight: 700;
+    color: #eef4ff;
+    letter-spacing: 0.04em;
+  }
+  .undo-redo-wrap { display: flex; gap: 4px; }
+  .undo-btn, .redo-btn {
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 8px;
+    padding: 3px 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .undo-btn:not(.disabled):hover, .redo-btn:not(.disabled):hover {
+    background: rgba(255,255,255,.14);
+    color: #e8eaf0;
+  }
+  .undo-btn.disabled, .redo-btn.disabled {
+    opacity: .3;
+    cursor: default;
+  }
+
+   
+  @keyframes pulse-antiga { 0%,100%{box-shadow:0 0 0 1px rgba(74,222,128,.15),0 0 0 rgba(74,222,128,0)} 50%{box-shadow:0 0 0 2px rgba(74,222,128,.5),0 0 20px rgba(74,222,128,.3)} }
+  @keyframes pulse-xina   { 0%,100%{box-shadow:0 0 0 1px rgba(96,165,250,.15),0 0 0 rgba(96,165,250,0)} 50%{box-shadow:0 0 0 2px rgba(96,165,250,.5),0 0 20px rgba(96,165,250,.3)} }
+  @keyframes pulse-koya   { 0%,100%{box-shadow:0 0 0 1px rgba(249,168,212,.15),0 0 0 rgba(249,168,212,0)} 50%{box-shadow:0 0 0 2px rgba(249,168,212,.5),0 0 20px rgba(249,168,212,.3)} }
+  @keyframes pulse-hanhwa { 0%,100%{box-shadow:0 0 0 1px rgba(250,204,21,.15),0 0 0 rgba(250,204,21,0)}  50%{box-shadow:0 0 0 2px rgba(250,204,21,.5),0 0 20px rgba(250,204,21,.3)} }
+  .zone-chip.co-antiga.hit { border-color: rgba(74,222,128,.6); background: rgba(74,222,128,.08); animation: pulse-antiga 1.6s ease-in-out infinite; }
+  .zone-chip.co-xina.hit   { border-color: rgba(96,165,250,.6); background: rgba(96,165,250,.08); animation: pulse-xina   1.6s ease-in-out infinite; }
+  .zone-chip.co-koya.hit   { border-color: rgba(249,168,212,.6); background: rgba(249,168,212,.08); animation: pulse-koya  1.6s ease-in-out infinite; }
+  .zone-chip.co-hanhwa.hit { border-color: rgba(250,204,21,.6); background: rgba(250,204,21,.08);  animation: pulse-hanhwa 1.6s ease-in-out infinite; }
+
+   
+  @keyframes wiggle {
+    0%,100% { transform: rotate(0deg); }
+    25%      { transform: rotate(-2deg); }
+    75%      { transform: rotate(2deg); }
+  }
+  .pallet.wiggling {
+    animation: wiggle 0.28s ease-in-out infinite;
+    outline: 3px solid var(--yellow);
+    outline-offset: 2px;
+    cursor: grab;
+    position: relative;
+    z-index: 2;
+     
+  }
+  .cross-grid.move-mode .pallet:not(.wiggling) { opacity: 0.38; }
+   
+   
+  .drop-zone, .drop-zone.drop-zone-flowless {
+    height: 32px;
+    min-height: 32px;
+    margin: -10px 2px;
+    padding: 0;
+    border-radius: 8px;
+    background: rgba(73,209,125,.10);
+    border: 1.5px dashed rgba(73,209,125,.45);
+    color: rgba(73,209,125,.75);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 6;
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .drop-zone::after, .drop-zone.drop-zone-flowless::after { content: none !important; display: none !important; }
+  .drop-zone.active, .drop-zone:hover,
+  .drop-zone.drop-zone-flowless.active, .drop-zone.drop-zone-flowless:hover {
+    background: rgba(73,209,125,.28);
+    border-color: #49d17d;
+    border-width: 2px;
+    color: #49d17d;
+  }
+  .cross-grid.move-mode .stack {
+    padding: 8px 0 12px;
+    overflow-x: hidden;
+  }
+  .cross-grid.move-mode .depth-col {
+    overflow: hidden;
+  }
+  .cross-section {
+    overflow-x: hidden;
+  }
+   
+  .move-ghost {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    border-radius: 14px;
+    padding: 9px 12px;
+    border: 2px solid var(--yellow);
+    background: #ffe95d;
+    color: #04101f;
+    box-shadow: 0 12px 36px rgba(0,0,0,.45);
+    min-width: 110px;
+    max-width: 160px;
+    transform: rotate(3deg) scale(1.06);
+    opacity: .92;
+    font-size: 12px;
+    font-weight: 900;
+  }
+   
+  .move-bar {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: #0a1321 !important;
+    border-top: 1px solid #2a3858;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    z-index: 10040 !important;
+    box-shadow: 0 -8px 28px rgba(0,0,0,.45);
+  }
+  .move-bar-sku { flex:1; font-size:13px; font-weight:900; color:var(--yellow); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .move-bar-slot-btn { background:#162e52; border:1px solid #4f90f1; border-radius:10px; padding:10px 14px; color:#a8ccff; font-size:13px; font-weight:800; cursor:pointer; white-space:nowrap; min-height:44px; }
+  .move-bar-cancel    { background:#1a1f2e; border:1px solid #2a3858; border-radius:10px; padding:10px 14px; color:#e5eefb; font-size:13px; font-weight:800; cursor:pointer; min-height:44px; min-width:72px; }
+  .move-bar-undo {
+    background:#1b3252; border:1px solid #3b659c; border-radius:10px;
+    padding:10px 14px; color:#7ec0ff; font-size:13px; font-weight:800;
+    cursor:pointer; white-space:nowrap; min-height:44px;
+  }
+  .move-bar-undo:disabled { opacity:.35; cursor:default; }
+  body.has-move-bar .detail-panel,
+  body.has-move-bar .cross-section {
+    padding-bottom: 72px;
+  }
+   
+  .item-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .move-start-btn {
+    padding: 8px 16px;
+    background: rgba(73,209,125,.15);
+    border: 1.5px solid rgba(73,209,125,.55);
+    border-radius: 12px;
+    color: #49d17d;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .move-start-btn:hover, .move-start-btn:active {
+    background: rgba(73,209,125,.28);
+    border-color: #49d17d;
+  }
+  .moving-badge {
+    font-size: 12px;
+    font-weight: 700;
+    color: #49d17d;
+    padding: 6px 10px;
+    background: rgba(73,209,125,.1);
+    border-radius: 10px;
+    border: 1px solid rgba(73,209,125,.3);
+  }
+   
+  .move-slot-overlay {
+    position: fixed; inset:0; background:rgba(2,6,13,.72);
+    display:flex; flex-direction:column; justify-content:flex-end;
+    z-index: 35; padding:0;
+  }
+  .move-slot-overlay.hidden { display:none; }
+  .move-slot-card {
+    background:#0c1425; border-radius:24px 24px 0 0;
+    border:1px solid var(--line); padding:20px;
+    max-height:72vh; overflow:auto;
+  }
+  .move-zone-row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #1e2e44; }
+  .move-zone-chip { padding:5px 12px; border-radius:20px; border:1px solid #2a3f5a; background:#0d1929; color:#8aabb8; font-size:12px; font-weight:700; cursor:pointer; transition:border-color .15s,background .15s; }
+  .move-zone-chip:active, .move-zone-chip.selected { border-color:#49d17d; background:#173a2a; color:#7ee787; }
+  .move-slot-list { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+  .move-slot-chip {
+    border:1px solid var(--line); background:#11192d;
+    border-radius:14px; padding:10px 14px; cursor:pointer;
+    color:var(--text); font-size:15px; font-weight:800;
+    transition: border-color .15s, background .15s;
+  }
+  .move-slot-chip:active, .move-slot-chip.selected { border-color:#49d17d; background:#173a2a; }
+  .move-slot-chip small { display:block; color:var(--muted); font-size:11px; font-weight:600; margin-top:2px; }
+  .move-depth-picker { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  .move-depth-picker.hidden { display:none; }
+  .move-depth-chip {
+    border:1px solid var(--line); background:#11192d;
+    border-radius:12px; padding:8px 14px; cursor:pointer;
+    color:var(--text); font-size:13px; font-weight:800;
+  }
+  .move-depth-chip.selected { border-color:#4f90f1; background:#162e52; color:#a8ccff; }
+   
+  .move-confirm-overlay {
+    position:fixed; inset:0; background:rgba(2,6,13,.72);
+    display:grid; place-items:center; z-index:40; padding:18px;
+  }
+  .move-confirm-overlay.hidden { display:none; }
+  .move-confirm-card {
+    width:min(440px,100%); background:#0c1425;
+    border-radius:20px; border:1px solid var(--line);
+    padding:20px; box-shadow:0 24px 70px rgba(0,0,0,.45);
+  }
+  .move-confirm-body { margin:14px 0; font-size:14px; line-height:1.7; }
+  @keyframes arrowBounceDown {
+    0% { transform: translateY(-8px); opacity: 0.3; }
+    50% { transform: translateY(6px); opacity: 1; filter: drop-shadow(0 0 8px #49d17d); }
+    100% { transform: translateY(14px); opacity: 0.2; }
+  }
+  .move-arrow { font-size:24px; text-align:center; margin:8px 0; color:#49d17d; transition: all 0.2s ease; }
+  .move-arrow.animating {
+    animation: arrowBounceDown 0.75s infinite ease-in-out !important;
+    display: block;
+  }
+  .move-err-msg { margin-top:10px; padding:8px 12px; border-radius:10px; background:rgba(240,66,66,.15); border:1px solid rgba(240,66,66,.4); color:#ff8f8f; font-size:13px; }
+   
+  @keyframes btnPulse {
+    0%,100% { opacity:1; }
+    50%      { opacity:0.55; }
+  }
+  .btn-loading {
+    animation: btnPulse 1s ease-in-out infinite;
+    pointer-events: none;
+    background: #1a3a6e !important;
+    border-color: #3a6abf !important;
+  }
+  .btn-retry {
+    background: #6e2020 !important;
+    border-color: #bf4040 !important;
+  }
+
+  .hero-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
+  .cache-row-inline { display: inline-flex; align-items: center; gap: 6px; }
+  .search-title-sm { font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 4px; }
+  .search-results { max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); border-radius: 12px; padding: 6px; background: #0b1424; }
+  .search-card { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; font-size: 13px; border-radius: 8px; background: #121d33; border: 1px solid #233452; cursor: pointer; color: var(--text); }
+  .zone-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .wh-tabs { display: flex; gap: 6px; }
+  .wh-tab-btn {
+    border-radius: 14px; padding: 6px 12px; border: 1px solid var(--line);
+    background: #11192d; color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 800;
+  }
+  .wh-tab-btn.active { border-color: #49d17d; background: #173a2a; color: #7ee787; }
+  .overview-head-left { display: flex; align-items: center; gap: 14px; }
+  .minimap-wrap {
+    width: 140px; height: 38px; border-radius: 10px; border: 1px solid var(--line);
+    background: #091322; overflow: hidden; position: relative; cursor: pointer; flex-shrink: 0;
+  }
+  .minimap-svg-container { width: 100%; height: 100%; pointer-events: auto; }
+
+  @media (max-width: 720px) {
+    html, body { width: 100vw !important; max-width: 100vw !important; overflow-x: hidden !important; margin: 0; padding: 0; }
+    .detail-grid { grid-template-columns: 1fr; }
+    .search-dual { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 6px !important; width: 100% !important; }
+    .search { font-size: 13px; height: 42px; padding: 0 10px; width: 100% !important; }
+    .corner-cell, .depth-head { min-width: 58px !important; }
+    .depth-head strong { font-size: 12px; }
+    .depth-head small { font-size: 10px; }
+    .app-shell { padding: 0 !important; width: 100vw !important; max-width: 100vw !important; overflow-x: hidden !important; }
+    .app-panel { border-radius: 0 !important; padding: 12px 8px !important; border-width: 0 !important; min-height: 100vh; width: 100vw !important; max-width: 100vw !important; box-sizing: border-box !important; overflow-x: hidden !important; }
+    .hero, .topbar { flex-direction: column; align-items: stretch; }
+    .hero-title-row { align-items: center; }
+    .hero h1 { font-size: 22px; margin: 0; }
+    .overview-head { flex-direction: row; align-items: center; justify-content: space-between; }
+    .detail-header { flex-direction: row; align-items: flex-start; }
+    .overview-table thead th { min-width: 154px; }
+    .overview-cell { min-width: 154px; }
+    .corner-cell, .depth-head { min-width: 84px; }
+    .detail-panel {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      margin: 0;
+      border-radius: 0;
+      z-index: 20;
+      max-height: none;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+      padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+      background: #070b14;
+    }
+    .detail-panel.hidden { display: none !important; }
+     
+    .detail-panel .detail-header { flex: 0 0 auto; padding-bottom: 4px; }
+    .detail-panel .detail-map { max-height: 72px; overflow: hidden; }
+    .detail-panel .cross-section {
+      order: 1;
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .detail-panel .item-detail,
+    .detail-panel .item-detail.empty {
+      display: none !important;
+    }
+     
+    .detail-panel.show-edit-card .item-detail:not(.empty) {
+      display: block !important;
+      order: 2;
+      flex: 0 0 auto;
+      max-height: 34vh;
+      overflow: auto;
+      margin-top: 8px;
+    }
+    .detail-panel .detail-close-x { z-index: 3; }
+    .detail-panel.move-active .item-detail { display: none !important; }
+    .detail-panel .move-bar {
+       
+      order: 3;
+    }
+    .cross-grid { grid-auto-columns: minmax(112px, 1fr); }
+    .pallet-sku { font-size: 13px; } .cell-sku { font-size: 16px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .modal {
+      position: fixed !important;
+      inset: 0 !important;
+      top: 50px !important;
+      bottom: 0 !important;
+      width: 100vw !important;
+      max-width: 100vw !important;
+      padding: 6px !important;
+      box-sizing: border-box !important;
+      justify-content: center !important;
+      align-items: center !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      z-index: 10000 !important;
+      background: rgba(2, 6, 13, 0.82) !important;
+    }
+     
+    .modal:not(.hidden) {
+      display: flex !important;
+    }
+    .modal.hidden {
+      display: none !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
+    .compact-card {
+      position: relative !important;
+      width: calc(100vw - 20px) !important;
+      max-width: 350px !important;
+      padding: 8px 10px !important;
+      border-radius: 14px !important;
+      background: #0b1322 !important;
+      border: 1px solid #233452 !important;
+      box-shadow: 0 16px 50px rgba(0,0,0,0.7) !important;
+      max-height: calc(100vh - 100px) !important;
+      overflow-y: auto !important;
+      margin: auto !important;
+    }
+  }
+
+   
+  .pallet-group {
+    border: 3px solid rgba(64, 220, 180, 0.75);
+    border-radius: 10px;
+    padding: 4px;
+    margin: 4px 0;
+    background: rgba(64, 220, 180, 0.06);
+    box-shadow: 0 0 0 1px rgba(64, 220, 180, 0.18), inset 0 0 8px rgba(64, 220, 180, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .pallet-group .pallet {
+    margin: 0;
+  }
+  .pallet-group.group-moving {
+    border-color: rgba(100, 190, 255, 0.85);
+    background: rgba(100, 190, 255, 0.08);
+    box-shadow: 0 0 0 1px rgba(100, 190, 255, 0.25), 0 0 12px rgba(100, 190, 255, 0.15);
+  }
+   
+  
+  .drop-zone.drop-zone-new {
+    height: 48px !important;
+    min-height: 48px !important;
+    margin: 8px 4px !important;
+    border: 1.5px dashed rgba(73,209,125,.45) !important;
+    background: rgba(73,209,125,.08) !important;
+    border-radius: 8px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    color: rgba(73,209,125,.75);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .drop-zone.drop-zone-new::after { display: none !important; }
+
+  .drop-zone.drop-zone-new {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255,200,80,.5);
+    border: 1px dashed rgba(255,200,80,.25);
+    border-radius: 8px;
+    margin: 4px 0;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .drop-zone.drop-zone-new.active,
+  .drop-zone.drop-zone-new:hover {
+    background: rgba(255,200,80,.12);
+    color: #f7c94f;
+    border-color: rgba(255,200,80,.6);
+  }
+
+  .move-bar-group-tag {
+    display: inline-block;
+    background: rgba(73, 209, 125, 0.18);
+    color: #49d17d;
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 5px;
+    vertical-align: middle;
+  }
+
+   
+  .modal-close-x {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    z-index: 10001 !important;
+    position: relative;
+  }
+  .modal .ghost-btn-sm, .modal .primary-btn-sm {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+  @media (max-width: 720px) {
+    .drop-zone, .drop-zone.drop-zone-flowless {
+      height: 40px !important;
+      min-height: 40px !important;
+      margin: -12px 2px !important;
+      font-size: 13px !important;
+      touch-action: manipulation;
+      position: relative;
+      z-index: 6;
+    }
+    .drop-zone::after, .drop-zone.drop-zone-flowless::after { content: none !important; display: none !important; }
+     
+    .detail-panel.move-active .item-detail { display: none !important; }
+    .detail-panel.move-active .cross-section {
+      max-height: none !important;
+      min-height: 60vh !important;
+      flex: 1 1 auto;
+    }
+    .move-bar {
+      z-index: 10040 !important;
+    }
+     
+    .modal:not(.hidden) {
+      z-index: 10000 !important;
+      pointer-events: auto !important;
+      display: flex !important;
+    }
+    .modal.hidden {
+      display: none !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
+    .modal .compact-card {
+      pointer-events: auto !important;
+      max-height: min(85vh, 640px) !important;
+    }
+  }
+
+
+   
+  .modal.hidden {
+    display: none !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+
+   
+  @media (max-width: 720px) {
+    .banner-undo-btn, .banner-redo-btn, .undo-btn, .redo-btn {
+      min-height: 44px !important;
+      min-width: 64px !important;
+      padding: 10px 14px !important;
+      font-size: 14px !important;
+      z-index: 30;
+      position: relative;
+    }
+    .cross-slot-banner {
+      position: sticky;
+      top: 0;
+      z-index: 12;
+      background: #070b14;
+      padding: 8px 4px !important;
+      margin-bottom: 6px !important;
+      flex-wrap: wrap;
+    }
+    .cross-grid {
+      --cross-col-min: 110px;
+      grid-auto-columns: minmax(var(--cross-col-min), 1fr) !important;
+      gap: 8px !important;
+    }
+    .pallet { padding: 7px 8px 6px !important; }
+    .pallet-sku { font-size: 11px !important; white-space: normal !important; overflow: visible !important; }
+    .detail-panel.move-active .cross-section { padding-bottom: 84px !important; }
+  }
+
+
+   
+  .search-wrap { max-height: 120px; overflow: auto; margin-bottom: 8px; }
+  .search-compact-bar { font-size: 12px; color: var(--muted); padding: 4px 2px 6px; }
+  .search-line {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; text-align: left; padding: 6px 10px; margin: 0 0 4px;
+    border-radius: 10px; border: 1px solid #2a3858; background: #0d172a; color: #e5eefb;
+    font-size: 13px; font-weight: 800; cursor: pointer;
+  }
+  .search-line .sl-sku { color: #fff; }
+  .search-line .sl-loc { color: var(--muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .cell-line.hit .cell-sku { color: #7ff0a6; }
+  .warehouse-map-wrap, .minimap-wrap, .detail-map { display: none !important; }
+  .detail-chrome {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  }
+  .loc-code { display: flex; flex-direction: column; gap: 2px; line-height: 1.25; }
+  .loc-line1, .loc-line2 { display: block; }
+  .detail-chrome-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .pending-save-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10060;
+    display: flex; align-items: center; gap: 10px; justify-content: center;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom,0px));
+    background: #13253f; border-top: 1px solid #3b659c; color: #e5eefb; font-weight: 800;
+  }
+  .pending-save-btn {
+    background: #2f6fed; border: none; color: #fff; border-radius: 10px;
+    padding: 10px 16px; font-weight: 900; min-height: 44px; cursor: pointer;
+  }
+  .pending-discard-btn {
+    background: #1a1f2e; border: 1px solid #2a3858; color: #c9d4e8; border-radius: 10px;
+    padding: 10px 14px; font-weight: 800; min-height: 44px; cursor: pointer;
+  }
+  body.has-pending-save .app-panel { padding-bottom: 72px; }
+  .edit-product-img { min-height: 0; }
+
+
+   
+  #searchWrap, .search-wrap { display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; border: none !important; }
+  .search-hint { font-size: 12px; color: var(--muted); font-weight: 700; min-height: 16px; margin-top: 4px; }
+
+   
+  .zone-chip.search-hit-frame,
+  .cell-btn.search-hit-frame {
+    border: 4px solid #facc15 !important;
+    box-shadow: 0 0 0 4px rgba(250,204,21,.35), 0 0 22px rgba(250,204,21,.55) !important;
+    animation: searchFramePulse 1.1s ease-in-out infinite;
+    outline: none !important;
+  }
+  @keyframes searchFramePulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(250,204,21,.28), 0 0 12px rgba(250,204,21,.35); border-color: #facc15; }
+    50% { box-shadow: 0 0 0 6px rgba(250,204,21,.55), 0 0 28px rgba(250,204,21,.7); border-color: #fde047; }
+  }
+  .search-pick-bar { margin-top: 8px; }
+  .pick-label { font-size: 12px; color: var(--muted); font-weight: 800; margin-bottom: 6px; display:flex; align-items:center; gap:8px; }
+  .pick-back { background:#1a2f4a; border:1px solid #3b659c; color:#a8ccff; border-radius:8px; padding:4px 8px; font-size:11px; font-weight:800; cursor:pointer; }
+  .pick-row { display:flex; flex-wrap:wrap; gap:8px; }
+  .sku-pick-chip, .batch-pick-chip {
+    display:inline-flex; flex-direction:column; align-items:flex-start; gap:2px;
+    border-radius:12px; padding:8px 12px; cursor:pointer; font-weight:900;
+    border:2px solid #2a3858; background:#0d172a; color:#e5eefb; min-height:44px;
+  }
+  .sku-pick-chip small { font-size:10px; font-weight:700; opacity:.85; }
+  .sku-pick-chip .pick-count, .batch-pick-chip .pick-count {
+    font-size:10px; color:var(--muted); font-weight:800;
+  }
+  .batch-pick-chip { flex-direction:row; align-items:center; gap:6px; }
+  .batch-pick-chip.selected { border-color:#ffe95d; background:#2a2410; color:#ffe95d; }
+   
+  .sku-pick-chip.co-koya { border-color:#f9a8d4; background:rgba(249,168,212,.12); }
+  .sku-pick-chip.co-hanhwa { border-color:#facc15; background:rgba(250,204,21,.12); }
+  .sku-pick-chip.co-xina { border-color:#60a5fa; background:rgba(96,165,250,.12); }
+  .sku-pick-chip.co-antiga { border-color:#4ade80; background:rgba(74,222,128,.12); }
+  .zone-chip.search-hit-frame.co-koya { border-color:#f9a8d4 !important; }
+  .zone-chip.search-hit-frame.co-hanhwa { border-color:#facc15 !important; }
+  .zone-chip.search-hit-frame.co-xina { border-color:#60a5fa !important; }
+  .zone-chip.search-hit-frame.co-antiga { border-color:#4ade80 !important; }
+  .status-tag.yellow { background:rgba(250,204,21,.2); color:#facc15; border:1px solid rgba(250,204,21,.45); border-radius:6px; padding:0 4px; font-size:10px; }
+
+</style>
+</head>
+<body>
+  <main class="app-shell">
+    <section class="app-panel">
+      <header class="hero">
+        <div class="hero-title-row">
+          <h1>永安倉</h1>
+          <div class="cache-row">
+            <span id="cacheInfo" class="cache-info loading">準備連線...</span>
+            <button class="cache-refresh" onclick="forceRefresh()" title="清除快取重新讀取">🔄</button>
+            <div id="undoRedoWrap" class="undo-redo-wrap" style="display:none"></div>
+          </div>
+        </div>
+      </header>
+
+      <section class="topbar">
+        <div class="search-dual">
+          <input id="searchSku" class="search" placeholder="搜尋編號 / SKU / 5碼" list="skuDatalist" autocomplete="off">
+          <datalist id="skuDatalist"></datalist>
+          <input id="searchBatch" class="search" placeholder="搜尋批號" list="batchDatalist" autocomplete="off">
+          <datalist id="batchDatalist"></datalist>
+        </div>
+        <div id="searchHint" class="search-hint"></div>
+        <div id="searchPickBar" class="search-pick-bar"></div>
+      </section>
+
+      <section id="searchWrap" class="search-wrap hidden">
+        <div class="search-title-sm">搜尋結果</div>
+        <div id="searchResults" class="search-results"></div>
+      </section>
+
+      <section class="zone-section">
+        <div class="zone-header-row">
+          <span class="section-title">區域</span>
+          <div id="whTabs" class="wh-tabs">
+            <button class="wh-tab-btn active" data-wh="ALL" onclick="selectWhTab('ALL')">全部</button>
+            <button class="wh-tab-btn" data-wh="A" onclick="selectWhTab('A')">A倉</button>
+            <button class="wh-tab-btn" data-wh="B" onclick="selectWhTab('B')">B倉</button>
+            <button class="wh-tab-btn" data-wh="C" onclick="selectWhTab('C')">C倉</button>
+          </div>
+        </div>
+        <div id="zoneChips" class="zone-chips"></div>
+      </section>
+
+      <section class="overview-panel">
+        <div class="overview-head">
+          <div class="overview-head-left">
+            <span class="section-title">俯視圖</span>
+            <div class="zoom-controls">
+              <button class="ghost-btn zoom-btn" onclick="zoomOut()">－</button>
+              <button class="ghost-btn zoom-btn" onclick="zoomIn()">＋</button>
+            </div>
+          </div>
+          <div id="minimapWrap" class="minimap-wrap" style="display:none!important" title="倉位預設圖（點擊或滑動定位）">
+            <div id="minimapSvg" class="minimap-svg-container"></div>
+          </div>
+        </div>
+        <div id="overviewTableWrap" class="overview-scroll"></div>
+      </section>
+
+      <section id="detailPanel" class="detail-panel hidden">
+        <button class="detail-close-x" onclick="closeDetail()" title="關閉">✕</button>
+        <div class="detail-header">
+          <div class="detail-header-left">
+            <div id="slotTitle" class="section-title">剖面圖</div>
+            <div id="slotMeta" class="section-subtitle">先從俯視圖點一個格子</div>
+          </div>
+          <div id="warehouseMapWrap" class="warehouse-map-wrap detail-map" style="display:none!important"></div>
+        </div>
+        <div id="cellItems" class="cell-items hidden" style="display:none"></div>
+        <div id="crossSection" class="cross-section"></div>
+        <div id="itemDetail" class="item-detail empty">點選剖面圖中的棧板卡片查看與編輯資料</div>
+      </section>
+    </section>
+  </main>
+
+  <div id="detailBackdrop" class="detail-backdrop hidden" onclick="closeDetail()"></div>
+
+  <div id="editModal" class="modal hidden" onclick="if(event.target===this)closeEdit(true);" ontouchend="if(event.target===this){event.preventDefault();closeEdit(true);}">
+    <div class="modal-card compact-card">
+      <button class="modal-close-x" onclick="closeEdit(true)" ontouchend="event.preventDefault();closeEdit(true)" type="button" title="關閉" aria-label="關閉">✕</button>
+      <div class="modal-head-sm">
+        <span class="modal-title-text">更新棧板資料</span>
+        <span id="editMeta" class="modal-subtitle-text">-</span>
+      </div>
+      <div id="editProductImg" class="edit-product-img" style="text-align:center;margin:0 0 8px"></div>
+      <div class="form-grid-compact">
+        <label>編號<input id="editSku"></label>
+        <label>批號<input id="editBatch"></label>
+        <label>品牌<input id="editBrand" readonly></label>
+        <label>系列<input id="editSeries" readonly></label>
+        <label>原文<input id="editOriginalName" readonly></label>
+        <label>尺寸<input id="editSize" readonly></label>
+        <div class="three-col-row">
+          <label>箱數<input id="editBoxes" type="number" inputmode="numeric" min="0" step="1"></label>
+          <label>片數<input id="editPieces" type="number" inputmode="numeric" min="0" step="1"></label>
+          <label>狀態<select id="editStatus"><option>正常庫存</option><option>混板/散板</option><option>專案庫存</option><option>最後一板</option></select></label>
+        </div>
+      </div>
+      <div class="action-bar-compact">
+        <button class="ghost-btn-sm" onclick="triggerMoveFromEdit()" type="button" style="margin-right:auto;background:#1b3252;border-color:#3b659c;color:#7ec0ff;">🚚 移動此板</button>
+        <button class="ghost-btn-sm" onclick="closeEdit(true)" ontouchend="event.preventDefault();closeEdit(true)" type="button">取消</button>
+        <button class="primary-btn-sm" onclick="saveEdit()" type="button">更新</button>
+      </div>
+    </div>
+  </div>
+
+  
+  <div id="moveSlotOverlay" class="move-slot-overlay hidden">
+    <div class="move-slot-card">
+      <div class="modal-head">
+        <div>
+          <div class="section-title">選擇目標格子</div>
+          <div id="moveSlotMeta" class="section-subtitle">-</div>
+        </div>
+        <button class="ghost-btn" onclick="closeMoveSlotPicker()">取消</button>
+      </div>
+      <div id="moveZoneRow" class="move-zone-row"></div>
+      <div id="moveDepthPicker" class="move-depth-picker hidden"></div>
+      <div id="moveSlotList" class="move-slot-list"></div>
+    </div>
+  </div>
+
+  
+  <div id="moveConfirmOverlay" class="move-confirm-overlay hidden">
+    <div class="move-confirm-card">
+      <div class="section-title">確認移動</div>
+      <div id="moveConfirmBody" class="move-confirm-body"></div>
+      <div class="action-bar">
+        <button class="ghost-btn" onclick="cancelMoveMode()">取消</button>
+        <button class="primary-btn" id="moveConfirmBtn" onclick="executeMove()">確認移動</button>
+      </div>
+    </div>
+  </div>
+
+  
+  
+  <div id="gridLoadingOverlay" class="grid-loading-overlay hidden">
+    <div class="spinner-box">
+      <div class="spinner-ring"></div>
+      <div id="gridLoadingText" class="spinner-text">資料載入中，請稍候...</div>
+    </div>
+  </div>
+
+  <script>
 
   const state = {
     sheets: [],
@@ -89,101 +1834,7 @@
   
   var _mt = { timer: null, startX: 0, startY: 0, dragging: false, ghost: null, overZone: null, suppressTapUntil: 0, touchMoved: false };
 
-  
-  async function deleteMovingPallet() {
-    if (!state.movingKey) return;
-    await confirmDeletePallet(state.movingKey);
-  }
-
-  async function confirmDeletePallet(palletKey) {
-    palletKey = String(palletKey || '').trim();
-    if (!palletKey) return;
-    var row = findRowByKey(palletKey) || state.movingRow;
-    var label = row ? ((row.SKU || '') + ' / ' + (row.Batch || '')) : palletKey;
-    if (!confirm('確認此棧板已出貨，要從庫位刪除？\n' + label + '\n\n此操作會立刻寫入試算表，無法用「取消這些移動」復原。')) return;
-    if (state.saving) return;
-    state.saving = true;
-    showGridLoading('正在刪除棧板…');
-    setStatus('刪除中…', 'loading');
-    try {
-      // 若在移動模式，先結束
-      state.movingKey = '';
-      state.movingRow = null;
-      state.movingGroupKeys = [];
-      document.querySelectorAll('.move-bar').forEach(function(el){ el.remove(); });
-      document.body.classList.remove('has-move-bar');
-      var result = await gas('deleteWarehousePallet', {
-        palletKey: palletKey,
-        sourceSheet: (row && row.Sheet) || state.activeSheet,
-        operator: getOperator()
-      });
-      if (result && result.history) applyHistory_(result.history);
-      if (result && result.zoneView) {
-        cacheSet('zone_' + result.zoneView.sheet, result.zoneView);
-        state.activeZoneView = result.zoneView;
-        state.activeSheet = result.zoneView.sheet;
-      }
-      state.activeItemKey = '';
-      state.activePalletKey = '';
-      renderOverviewTable();
-      renderDetailPanel();
-      setStatus('已刪除：' + label, 'ok');
-    } catch (e) {
-      var msg = (e && e.message) ? e.message : String(e);
-      setStatus('刪除失敗：' + msg, 'err');
-      alert('刪除失敗：' + msg);
-    } finally {
-      state.saving = false;
-      hideGridLoading();
-    }
-  }
-
-  async function deleteSingleSkuFromPallet(palletKey) {
-    palletKey = String(palletKey || '').trim();
-    if (!palletKey || state.saving) return;
-    var row = findRowByKey(palletKey) || state.movingRow;
-    var label = row ? ((row.SKU || '-') + ' / 批號: ' + (row.Batch || '-')) : palletKey;
-
-    if (!confirm('確認刪除此單一編號？\n' + label + '\n\n此操作會直接從此板中移除該編號並寫入試算表。')) return;
-
-    state.saving = true;
-    showGridLoading('正在刪除單一編號 ' + label + '…');
-    setStatus('刪除中…', 'loading');
-    try {
-      if (state.movingKey === palletKey) {
-        state.movingKey = '';
-        state.movingRow = null;
-        state.movingGroupKeys = [];
-        document.querySelectorAll('.move-bar').forEach(function(el){ el.remove(); });
-        document.body.classList.remove('has-move-bar');
-      }
-      var result = await gas('deleteWarehousePallet', {
-        palletKey: palletKey,
-        sourceSheet: (row && row.Sheet) || state.activeSheet,
-        operator: getOperator()
-      });
-      if (result && result.history) applyHistory_(result.history);
-      if (result && result.zoneView) {
-        cacheSet('zone_' + result.zoneView.sheet, result.zoneView);
-        state.activeZoneView = result.zoneView;
-        state.activeSheet = result.zoneView.sheet;
-      }
-      state.activeItemKey = '';
-      state.activePalletKey = '';
-      renderOverviewTable();
-      renderDetailPanel();
-      setStatus('已成功刪除單一編號：' + label, 'ok');
-    } catch (e) {
-      var msg = (e && e.message) ? e.message : String(e);
-      setStatus('刪除失敗：' + msg, 'err');
-      alert('刪除失敗：' + msg);
-    } finally {
-      state.saving = false;
-      hideGridLoading();
-    }
-  }
-
-function startMoveMode(palletKey) {
+  function startMoveMode(palletKey) {
     var row = findRowByKey(palletKey);
     if (!row) return;
     state.activePalletKey = palletKey;
@@ -515,21 +2166,17 @@ function startMoveMode(palletKey) {
     state.recentlyMovedKey = moved.PalletKey;
   }
 
-  function clearPendingSaveBar_() {
-    document.querySelectorAll('#pendingSaveBar, .pending-save-bar').forEach(function(el){ el.remove(); });
-    document.body.classList.remove('has-pending-save');
-  }
-
   function renderPendingSaveBar_() {
-    clearPendingSaveBar_();
+    var old = document.getElementById('pendingSaveBar');
+    if (old) old.remove();
     var n = (state.pendingMoves || []).length;
     if (!n) return;
     var bar = document.createElement('div');
     bar.id = 'pendingSaveBar';
     bar.className = 'pending-save-bar';
-    bar.innerHTML = '<div class="pending-save-text"><strong>' + n + '</strong> 筆移動尚未寫入試算表</div>' +
-      '<button type="button" class="pending-save-btn" onclick="flushPendingMoves()">寫入試算表</button>' +
-      '<button type="button" class="pending-discard-btn" onclick="discardPendingMoves()">取消這些移動</button>';
+    bar.innerHTML = '<span>待存檔 <strong>' + n + '</strong> 筆移動</span>' +
+      '<button type="button" class="pending-save-btn" onclick="flushPendingMoves()">全部存檔</button>' +
+      '<button type="button" class="pending-discard-btn" onclick="discardPendingMoves()">丟棄</button>';
     document.body.appendChild(bar);
     document.body.classList.add('has-pending-save');
   }
@@ -537,18 +2184,14 @@ function startMoveMode(palletKey) {
   async function flushPendingMoves() {
     if (!state.pendingMoves.length || state.saving) return;
     state.saving = true;
-    showGridLoading('一次寫入堆疊順序（' + state.pendingMoves.length + ' 筆移動）…');
+    showGridLoading('一次寫入 ' + state.pendingMoves.length + ' 筆移動…');
     setStatus('批次存檔中…', 'loading');
     var moves = state.pendingMoves.slice();
     try {
-      var orders = collectFinalDepthOrders_(moves);
-      var result = await gas('commitDepthOrders', {
-        moves: moves,
-        orders: orders,
-        operator: getOperator()
-      });
+      var result = await gas('movePalletBatch', { moves: moves, operator: getOperator() });
       state.pendingMoves = [];
-      clearPendingSaveBar_();
+      renderPendingSaveBar_();
+      document.body.classList.remove('has-pending-save');
       if (result && result.history) applyHistory_(result.history);
       if (result && result.zoneView) {
         cacheSet('zone_' + result.zoneView.sheet, result.zoneView);
@@ -563,7 +2206,7 @@ function startMoveMode(palletKey) {
       if (bd) bd.classList.add('hidden');
       document.body.style.overflow = '';
       renderOverviewTable();
-      setStatus('已存檔 ' + moves.length + ' 筆移動 ✓（層序已鎖定）', 'ok');
+      setStatus('已存檔 ' + moves.length + ' 筆移動 ✓', 'ok');
     } catch (e) {
       var msg = (e && e.message) ? e.message : String(e);
       setStatus('批次存檔失敗：' + msg, 'err');
@@ -574,57 +2217,13 @@ function startMoveMode(palletKey) {
     }
   }
 
-  /** @222 從樂觀 UI 收集最終堆疊順序（index0=最上層=Level1） */
-  function collectFinalDepthOrders_(moves) {
-    var zv = state.activeZoneView;
-    var keys = {};
-    (moves || []).forEach(function(m) {
-      keys[[m.sourceSheet, m.destSlot || '', m.destDepth || ''].join('|')] = 1;
-      keys[[m.destSheet || m.sourceSheet, m.destSlot, m.destDepth].join('|')] = 1;
-      keys[[m.sourceSheet, String((m.palletKey||'').split('||')[1]||''), String((m.palletKey||'').split('||')[2]||'')].join('|')] = 1;
-    });
-    var orders = [];
-    if (!zv) return orders;
-    (zv.slots || []).forEach(function(slot) {
-      (slot.depths || []).forEach(function(d) {
-        var k1 = [zv.sheet, slot.slotId, d.depth].join('|');
-        // 一律送出被移動碰過的 depth；若 keys 空則送全部有板的
-        var touched = Object.keys(keys).some(function(k){
-          var p = k.split('|');
-          return p[0] === String(zv.sheet) && p[1] === String(slot.slotId) && String(p[2]) === String(d.depth);
-        });
-        if (!touched && (moves||[]).length) return;
-        var list = (d.pallets || []).slice();
-        orders.push({
-          sheet: zv.sheet,
-          slot: String(slot.slotId),
-          depth: Number(d.depth),
-          pallets: list.map(function(p, idx){
-            return {
-              sku: p.SKU || '',
-              batch: p.Batch || '',
-              boxQty: Number(p.BoxQty || 0),
-              pieceQty: Number(p.PieceQty || 0),
-              bgColor: p.BgColor || p.bgColor || 'WHITE',
-              fontColor: p.FontColor || p.fontColor || 'BLACK',
-              PalletGroupId: p.PalletGroupId || '',
-              format: (p.BgColor === 'WHITE' || p.bgColor === 'WHITE') ? 'white' : 'colored',
-              level: idx + 1,
-              palletKey: p.PalletKey || ''
-            };
-          })
-        });
-      });
-    });
-    return orders;
-  }
-
   function discardPendingMoves() {
     if (!state.pendingMoves.length) return;
-    if (!confirm('取消 ' + state.pendingMoves.length + ' 筆尚未寫入的移動？畫面會回復存檔前位置。')) return;
+    if (!confirm('丟棄 ' + state.pendingMoves.length + ' 筆尚未存檔的移動？畫面將重新載入。')) return;
     state.pendingMoves = [];
-    clearPendingSaveBar_();
-    if (state.activeSheet) loadZone(state.activeSheet, null, null, null, { force: true });
+    renderPendingSaveBar_();
+    document.body.classList.remove('has-pending-save');
+    if (state.activeSheet) loadZone(state.activeSheet);
   }
 
 
@@ -856,29 +2455,6 @@ function startMoveMode(palletKey) {
     wrap.innerHTML = _undoRedoBtnHtml_('undo', 'undo-btn') + _undoRedoBtnHtml_('redo', 'redo-btn');
   }
 
-  function closeUndoPicker() {
-    var p = document.getElementById('undoPicker');
-    if (p) p.remove();
-  }
-
-  function openUndoPicker() {
-    closeUndoPicker();
-    var max = Math.min(Number(_history.undoCount || 1), 20);
-    if (max <= 1) { undoSteps_(1); return; }
-    var box = document.createElement('div');
-    box.id = 'undoPicker';
-    box.className = 'undo-picker';
-    var opts = [1,2,3,5,10].filter(function(n){ return n < max; });
-    if (opts.indexOf(max) < 0) opts.push(max);
-    box.innerHTML = '<h4>還原幾步？</h4><div class="undo-picker-row">' +
-      opts.map(function(n){
-        var cls = (n === max) ? ' primary' : '';
-        return '<button type="button" class="' + cls + '" onclick="undoSteps_(' + n + ')">' + n + '</button>';
-      }).join('') +
-      '</div><button type="button" class="undo-picker-cancel" onclick="closeUndoPicker()">取消</button>';
-    document.body.appendChild(box);
-  }
-
   async function doUndo() {
     if (state.saving) {
       setStatus('尚有寫入進行中，請稍候再還原', 'err');
@@ -888,29 +2464,27 @@ function startMoveMode(palletKey) {
       setStatus('目前沒有可還原的移動', 'err');
       return;
     }
-    openUndoPicker();
-  }
-
-  async function undoSteps_(n) {
-    closeUndoPicker();
-    n = Math.max(1, Math.min(Number(n) || 1, 20));
-    if (state.saving) return;
-    if (!_history.canUndo) return;
     state.saving = true;
     _historyBusy = 'undo';
     renderUndoRedo();
+    
     document.querySelectorAll('.move-bar-undo').forEach(function(b){ b.disabled = true; });
-    setStatus('還原 ' + n + ' 步…', 'loading');
-    showGridLoading('正在還原 ' + n + ' 步…');
+    setStatus('還原中…', 'loading');
+    showGridLoading('正在還原移動...');
     try {
-      var result = await gas('undoMoves', { n: n });
+      var result = await gas('undoLastMove');
       await applyMoveResult_(result);
-      setStatus('已還原 ' + (result && result.undone ? result.undone : n) + ' 步 ✓', 'ok');
+      setStatus('已還原 ✓', 'ok');
     } catch (e) {
       var msg = (e && e.message) ? e.message : String(e || 'unknown');
-      console.error('[undoSteps_]', msg, e);
-      setStatus('還原失敗：' + msg, 'err');
-      alert('還原失敗：' + msg);
+      console.error('[doUndo]', msg, e);
+      if (msg.indexOf('pallet not found') >= 0 || msg.indexOf('please refresh') >= 0) {
+        setStatus('⚠️ 還原失敗：找不到原棧板，請重新整理後手動確認', 'err');
+        _bgRefreshZone(state.activeSheet, false);
+      } else {
+        setStatus('還原失敗：' + msg, 'err');
+        alert('還原失敗：' + msg);
+      }
       gas('getMoveHistory').then(applyHistory_).catch(function(){});
     } finally {
       state.saving = false;
@@ -1241,12 +2815,8 @@ function startMoveMode(palletKey) {
 
   function fail(err) {
     hideGridLoading();
-    var msg = '';
-    if (err && err.message) msg = err.message;
-    else if (err && err.details) msg = err.details;
-    else msg = String(err || 'unknown');
-    console.error('[fail]', msg, err);
-    setStatus('載入失敗：' + msg, 'bad');
+    const msg = (err && (err.stack || err.message)) || String(err);
+    setStatus("載入失敗：\n" + msg, "bad");
   }
 
   function gas(method, ...args) {
@@ -1256,7 +2826,7 @@ function startMoveMode(palletKey) {
         return;
       }
       let done = false;
-      const timeoutMs = method === 'movePalletGroup' ? 90000 : method === 'movePallet' ? 60000 : method === "updateWarehousePallet" ? 45000 : method === "getSearchIndex" ? 45000 : method === "getWarehouseZoneView" ? 25000 : 40000;
+      const timeoutMs = method === 'movePalletGroup' ? 90000 : method === 'movePallet' ? 60000 : method === "updateWarehousePallet" ? 45000 : method === "getSearchIndex" ? 120000 : 60000;
       console.log('[gas calling]', method, JSON.stringify(args[0] || ''));
       const timer = setTimeout(() => {
         if (!done) {
@@ -1364,8 +2934,7 @@ function startMoveMode(palletKey) {
 
   
   const CACHE_FRESH_MS  =  5 * 60 * 1000;   
-  const CACHE_STALE_MS  = 30 * 60 * 1000;
-  const CACHE_SEARCH_MS = 24 * 60 * 60 * 1000; // @222 搜尋日快取   
+  const CACHE_STALE_MS  = 30 * 60 * 1000;   
   
 
   function cacheGet(key) {
@@ -1475,7 +3044,7 @@ function startMoveMode(palletKey) {
       const ageMs = cacheAgeMs('zone_' + sheet.name);
       if (ageMs < CACHE_STALE_MS) continue;              
       await _bgRefreshZone(sheet.name, true);            
-      await new Promise(r => setTimeout(r, 150)); // @227 faster warm        
+      await new Promise(r => setTimeout(r, 600));        
     }
     console.log('[preload] all zones warmed');
   }
@@ -1509,31 +3078,11 @@ function startMoveMode(palletKey) {
       
       gas('getMoveHistory').then(applyHistory_).catch(() => {});
       
-      setTimeout(_preloadAllZones, 800); // @227 sooner warm
+      setTimeout(_preloadAllZones, 3000);
     } catch (err) {
       hideGridLoading();
       fail(err);
     }
-  }
-
-  function mergeZoneIntoSearch_(zoneView) {
-    if (!zoneView || !zoneView.slots) return;
-    if (!Array.isArray(state.searchRows)) state.searchRows = [];
-    var byKey = {};
-    state.searchRows.forEach(function(r){ if (r && r.PalletKey) byKey[r.PalletKey] = r; });
-    (zoneView.slots || []).forEach(function(slot) {
-      (slot.depths || []).forEach(function(d) {
-        (d.pallets || []).forEach(function(p) {
-          var row = Object.assign({ Sheet: zoneView.sheet }, p);
-          if (!row.PalletKey) {
-            row.PalletKey = [zoneView.sheet, row.Slot, row.Depth, row.Level, row.SKU, row.Batch].join('||');
-          }
-          byKey[row.PalletKey] = row;
-        });
-      });
-    });
-    state.searchRows = Object.keys(byKey).map(function(k){ return byKey[k]; });
-    state.searchReady = state.searchRows.length > 0;
   }
 
   function buildFallbackSearchIndex_() {
@@ -1587,55 +3136,37 @@ function startMoveMode(palletKey) {
   }
 
   async function preloadSearchIndex() {
-    // @222: 先用本地區快取秒開；背景再拉全日索引（24h）
-    var local = buildFallbackSearchIndex_();
-    var cached = cacheGet('search');
-    var ageMs = cacheAgeMs('search');
-    if (Array.isArray(cached) && cached.length && ageMs < CACHE_SEARCH_MS) {
-      state.searchRows = cached;
-      state.searchReady = true;
-      renderSearch();
-    } else if (local.length) {
-      state.searchRows = local;
-      state.searchReady = true;
-      renderSearch();
-    }
-    // 背景更新（不擋搜尋、不重複提示）
-    (async function() {
-      try {
-        if (Array.isArray(cached) && cached.length && ageMs < CACHE_SEARCH_MS) return;
-        var raw = await gas('getSearchIndex');
-        var rows = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (Array.isArray(rows) && rows.length) {
-          cacheSet('search', rows);
-          state.searchRows = rows;
-          state.searchReady = true;
-          renderSearch();
-        }
-      } catch (err) {
-        console.warn('search bg refresh failed', err);
-        if (!state.searchReady) {
-          var fb = buildFallbackSearchIndex_();
-          if (fb.length) {
-            state.searchRows = fb;
-            state.searchReady = true;
-            renderSearch();
-          }
-        }
+    try {
+      let rows = cacheGet('search');
+      const ageMs = cacheAgeMs('search');
+      if (!rows || ageMs >= CACHE_STALE_MS) {
+        const raw = await gas("getSearchIndex");
+        rows = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (Array.isArray(rows)) cacheSet('search', rows);
       }
-    })();
+      if (Array.isArray(rows)) {
+        state.searchRows = rows;
+        state.searchReady = true;
+        renderSearch();
+        return;
+      }
+      throw new Error('search index empty');
+    } catch (err) {
+      console.warn("search preload failed", err);
+      var msg = (err && err.message) ? err.message : String(err || 'unknown');
+      var fallback = buildFallbackSearchIndex_();
+      state.searchRows = fallback;
+      state.searchReady = true;
+      if (fallback.length) {
+        setStatus('搜尋索引載入失敗，已用已載入分區建立臨時索引（' + fallback.length + ' 筆）：' + msg, 'err');
+      } else {
+        setStatus('搜尋索引載入失敗：' + msg + '（尚無可用分區資料，請先打開分區後再搜）', 'err');
+      }
+      try { renderSearch(); } catch (e3) {}
+    }
   }
 
-  async function loadZone(sheetName, preferredSlot, preferredDepth, preferredPalletKey, opts) {
-    opts = opts || {};
-    var same = (sheetName === state.activeSheet && state.activeZoneView);
-    var noJump = !preferredSlot && !preferredDepth && !preferredPalletKey;
-    if (same && noJump && !opts.force) {
-      // @223 已在此區：不重讀
-      renderZoneChips();
-      setStatus('目前在 ' + sheetName, 'ok');
-      return;
-    }
+  async function loadZone(sheetName, preferredSlot, preferredDepth, preferredPalletKey) {
     state.activeSheet = sheetName;
     localStorage.setItem('wms_last_zone', sheetName);
     renderZoneChips();
@@ -1650,7 +3181,6 @@ function startMoveMode(palletKey) {
       state.activeDepth = Number(preferredDepth || 0);
       state.activePalletKey = preferredPalletKey || "";
       state.activeItemKey = preferredPalletKey || "";
-      mergeZoneIntoSearch_(zoneView);
       renderOverviewTable();
       renderDetailPanel();
       renderSearch();
@@ -1679,7 +3209,6 @@ function startMoveMode(palletKey) {
       state.activeDepth = Number(preferredDepth || 0);
       state.activePalletKey = preferredPalletKey || "";
       state.activeItemKey = preferredPalletKey || "";
-      mergeZoneIntoSearch_(zoneView);
       renderOverviewTable();
       renderDetailPanel();
       renderSearch();
@@ -1722,12 +3251,11 @@ function startMoveMode(palletKey) {
       filteredSheets = filteredSheets.filter(s => s.name.startsWith('C-'));
     }
 
-    const sorted = (q && q.pickedSku)
+    const sorted = hasSearchQuery(q)
       ? [...filteredSheets].sort((a, b) => (zoneHits.has(a.name) ? 0 : 1) - (zoneHits.has(b.name) ? 0 : 1))
       : filteredSheets;
 
-    // @224：未選定完整編號前不亮區框（避免 612110 誤亮 B-F）
-    const searching = !!(q && q.pickedSku);
+    const searching = hasSearchQuery(q);
     $("zoneChips").innerHTML = sorted.map(sheet => {
       const active = sheet.name === state.activeSheet ? "active" : "";
       const isHit = searching && zoneHits.has(sheet.name);
@@ -1877,12 +3405,10 @@ function startMoveMode(palletKey) {
       var skuL = sku.toLowerCase();
       var han = String(row.HanhwaCode || '').toLowerCase();
       var ok = false;
-      if (/^\d{5,}$/.test(needle)) {
-        ok = han === needle || han.endsWith(needle) || skuL.endsWith(needle) || skuL.indexOf(needle) >= 0;
-      } else if (needle.length >= 2) {
-        ok = skuL === needle || skuL.indexOf(needle) >= 0 || skuL.startsWith(needle) || han.indexOf(needle) >= 0;
+      if (/^\d{5}$/.test(needle)) {
+        ok = han === needle || skuL.endsWith(needle) || skuL.indexOf(needle) >= 0;
       } else {
-        ok = skuL.startsWith(needle) || han.startsWith(needle);
+        ok = skuL === needle || skuL.indexOf(needle) >= 0 || han === needle;
       }
       if (!ok) return;
       if (!map[skuL]) {
@@ -1908,91 +3434,27 @@ function startMoveMode(palletKey) {
     return Object.keys(set).sort().map(function(b){ return { batch: b, count: set[b] }; });
   }
 
-  
-  function bindSkuDropdownClicks_(el) {
-    if (!el || el._boundSku) return;
-    el._boundSku = true;
-    function handle(ev) {
-      var btn = ev.target && ev.target.closest && ev.target.closest('[data-sku]');
-      if (!btn || !el.contains(btn)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      selectSearchSku(btn.getAttribute('data-sku') || '');
-    }
-    el.addEventListener('click', handle);
-    el.addEventListener('touchend', handle, { passive: false });
-  }
-  function bindBatchDropdownClicks_(el) {
-    if (!el || el._boundBatch) return;
-    el._boundBatch = true;
-    function handle(ev) {
-      var btn = ev.target && ev.target.closest && ev.target.closest('[data-batch]');
-      if (!btn || !el.contains(btn)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      selectSearchBatch(btn.getAttribute('data-batch') || '');
-    }
-    el.addEventListener('click', handle);
-    el.addEventListener('touchend', handle, { passive: false });
-  }
-
-function selectSearchSku(sku) {
-    sku = String(sku || '').trim();
-    if (!sku) return;
-    state.searchPick = { sku: sku, batch: '' };
-    var skuInput = $("searchSku");
-    if (skuInput) {
-      skuInput.value = sku;
-      state._ignoreSkuInputOnce = true;
-    }
-    var batchInput = $("searchBatch");
-    if (batchInput) batchInput.value = '';
-    var sd = $("skuDropdown");
-    if (sd) { sd.innerHTML = ''; sd.classList.add('hidden'); }
-    state.searchPick.batchChosen = false; // @227 尚未選批號 → 不導航
+  function selectSearchSku(sku) {
+    state.searchPick = state.searchPick || { sku: '', batch: '' };
+    state.searchPick.sku = sku || '';
+    state.searchPick.batch = '';
+    if ($("searchBatch")) $("searchBatch").value = '';
     renderSearch();
-    if (batchInput) {
-      setTimeout(function(){ try { batchInput.focus(); } catch(e){} }, 30);
-    }
-    // 選編號後只開批號下拉，不置中跳轉
+    
+    navigateToFirstSearchHit_();
   }
 
   function selectSearchBatch(batch) {
     state.searchPick = state.searchPick || { sku: '', batch: '' };
     state.searchPick.batch = batch || '';
-    state.searchPick.batchChosen = true; // 含「全部批號」
     if ($("searchBatch")) $("searchBatch").value = batch || '';
-    var bd = $("batchDropdown"); if (bd) { bd.classList.add("hidden"); bd.innerHTML = ""; }
     renderSearch();
-    navigateToFirstSearchHit_(); // @227 只有選完批號才跳
+    navigateToFirstSearchHit_();
   }
 
   function clearSearchPick() {
-    state.searchPick = { sku: '', batch: '', batchChosen: false };
+    state.searchPick = { sku: '', batch: '' };
     renderSearch();
-  }
-
-  function clearSkuSearch() {
-    state.searchPick = { sku: '', batch: '', batchChosen: false };
-    state._ignoreSkuInputOnce = true;
-    if ($("searchSku")) $("searchSku").value = '';
-    if ($("searchBatch")) $("searchBatch").value = '';
-    var sd = $("skuDropdown"); if (sd) { sd.innerHTML=''; sd.classList.add('hidden'); }
-    var bd = $("batchDropdown"); if (bd) { bd.innerHTML=''; bd.classList.add('hidden'); }
-    if ($("searchHint")) $("searchHint").textContent = '';
-    setStatus('', 'ok');
-    renderZoneChips();
-    renderOverviewTable();
-  }
-
-  function clearBatchSearch() {
-    if (state.searchPick) {
-      state.searchPick.batch = '';
-      state.searchPick.batchChosen = false;
-    }
-    state._ignoreBatchInputOnce = true;
-    if ($("searchBatch")) $("searchBatch").value = '';
-    renderSearch(); // 重開批號下拉，不導航
   }
 
   async function navigateToFirstSearchHit_() {
@@ -2206,7 +3668,7 @@ function selectSearchSku(sku) {
         const query = currentSearchQuery();
         const slotDepthHits = searchSlotDepthSet();
         const lineHtml = pallets.map((row, idx) => {
-          const hit = (query.pickedSku && rowMatchesQuery(row, query)) ? 'hit' : '';
+          const hit = rowMatchesQuery(row, query) ? 'hit' : '';
           const isRed = row.BgColor === 'RED' || row.Status === '混板/散板';
           const isYellow = row.BgColor === 'YELLOW';
           const isGreen = row.BgColor === 'GREEN';
@@ -2214,10 +3676,11 @@ function selectSearchSku(sku) {
           const statusBadge = isRed ? '<span class="status-tag red">散板</span>' : isYellow ? '<span class="status-tag yellow">散板</span>' : isGreen ? '<span class="status-tag green">專案</span>' : '';
           const movedCls = isRecentlyMoved(row) ? 'just-moved' : '';
           var batchHtml = hasSearchQuery(query) ? '' : ('<div class="cell-batch-badge">' + esc(row.Batch || '-') + '</div>');
-          return '<div class="cell-line ' + hit + ' ' + colorCls + ' ' + movedCls + '"><div class="cell-main"><div class="cell-sku">' + esc(row.SKU || '-') + ' ' + statusBadge + '</div></div>' + batchHtml + '</div>';
+          var hitTag = hit ? '<span class="status-tag yellow">搜到</span>' : '';
+          return '<div class="cell-line ' + hit + ' ' + colorCls + ' ' + movedCls + '"><div class="cell-main"><div class="cell-sku">' + esc(row.SKU || '-') + ' ' + statusBadge + hitTag + '</div></div>' + batchHtml + '</div>';
         }).join('');
         const hitKey = [state.activeSheet, slot.slotId, depth].join('||');
-        const anyHit = (query.pickedSku) && slotDepthHits.has(hitKey) ? 'search-hit-frame' : '';
+        const anyHit = hasSearchQuery(query) && slotDepthHits.has(hitKey) ? 'search-hit-frame' : '';
         const active = state.activeSlot === slot.slotId && Number(state.activeDepth) === Number(depth) ? 'active' : '';
         const area = (state.activeSheet || '').replace(/-/g, '_');
         const lv = v => '<span class="cf-val">' + esc(String(v)) + '</span>';
@@ -2390,8 +3853,7 @@ function selectSearchSku(sku) {
             var tag = isRed ? ' <span class="status-tag red" style="font-size:9px;padding:0 3px">散板</span>' : isYellow ? ' <span class="status-tag yellow" style="font-size:9px;padding:0 3px">散板</span>' : isGreen ? ' <span class="status-tag green" style="font-size:9px;padding:0 3px">專案</span>' : '';
             var movedCls = isRecentlyMoved(row) ? ' just-moved' : '';
             var timeHtml = row.UpdatedAt ? '<span class="pallet-card-time" style="color:#7ff0a6;font-size:10px;font-weight:800;margin-left:4px">🕒 ' + esc(formatMoveTime(row.UpdatedAt)) + '</span>' : '';
-            var deleteX = '<span class="pallet-card-delete-x" onclick="event.stopPropagation(); deleteSingleSkuFromPallet(' + JSON.stringify(row.PalletKey || '') + '); return false;" title="刪除此單一編號">✕</span>';
-            return '<button class="pallet ' + paletteClass(row) + ' ' + selected + movedCls + '" data-key="' + esc(row.PalletKey || '') + '" onclick="onPalletTap(' + JSON.stringify(row.PalletKey || '') + '); return false;">' + deleteX + '<div class="pallet-sku">' + skuHtml(row.SKU || '-') + tag + '</div><div class="pallet-meta"><span>' + esc(row.Batch || '-') + '</span><span>' + esc(formatPalletQty_(row)) + timeHtml + '</span></div></button>';
+            return '<button class="pallet ' + paletteClass(row) + ' ' + selected + movedCls + '" data-key="' + esc(row.PalletKey || '') + '" onclick="onPalletTap(' + JSON.stringify(row.PalletKey || '') + '); return false;"><div class="pallet-sku">' + skuHtml(row.SKU || '-') + tag + '</div><div class="pallet-meta"><span>' + esc(row.Batch || '-') + '</span><span>' + esc(formatPalletQty_(row)) + timeHtml + '</span></div></button>';
           }).join('');
           if (group.pallets.length > 1) {
             return '<div class="pallet-group">' + palletHtml + '</div>';
@@ -2434,7 +3896,6 @@ function selectSearchSku(sku) {
         '<span class="move-bar-sku">' + esc(srcRow ? srcRow.SKU || '-' : '-') + groupTag + '</span>' +
         '<button type="button" class="move-bar-undo" onclick="doUndo()" ' + (canUndo ? '' : 'disabled') + '>還原</button>' +
         '<button type="button" class="move-bar-slot-btn" onclick="openMoveSlotPicker()">移動到其它列</button>' +
-        '<button type="button" class="move-bar-trash" onclick="deleteMovingPallet()">🗑 出貨刪除</button>' +
         '<button type="button" class="move-bar-cancel" onclick="cancelMoveMode()">取消</button>' +
         '</div>';
       document.body.insertAdjacentHTML('beforeend', moveBarHtml);
@@ -2512,11 +3973,7 @@ function selectSearchSku(sku) {
     const kgBox = (row.KgPerBox != null && row.KgPerBox !== '') ? Math.ceil(Number(row.KgPerBox)) + ' KG' : '-';
     const kgPallet = (row.KgPerPallet != null && row.KgPerPallet !== '') ? Math.ceil(Number(row.KgPerPallet)) + ' KG' : '-';
     const pzStr = row.PiecesPerBox ? String(row.PiecesPerBox) + ' pz/箱' : '';
-    var rawImg = row.SinglePieceImage || row.ImageUrl || ((row.Branches || [])[0] || {}).SinglePieceImage || '';
-    if (!rawImg && state.searchRows) {
-      var _hi = state.searchRows.find(function(r){ return String(r.SKU||'').toLowerCase() === String(row.SKU||'').toLowerCase(); });
-      if (_hi) rawImg = _hi.SinglePieceImage || _hi.ImageUrl || '';
-    }
+    const rawImg = row.SinglePieceImage || ((row.Branches || [])[0] || {}).SinglePieceImage || '';
     const imgUrl = driveThumbUrl(rawImg);
     const imgHtml = imgUrl ? '<div class="item-img-wrap"><img class="item-img" src="' + esc(imgUrl) + '" alt="' + esc(row.SKU || '') + '" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></div>' : '';
 
@@ -2553,7 +4010,6 @@ function selectSearchSku(sku) {
         '<div class="item-sum-actions" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">' +
           '<button type="button" class="detail-toggle" style="margin:0" onclick="openEditByKey(' + JSON.stringify(row.PalletKey || '') + ')">編輯此板</button>' +
           '<button type="button" class="detail-toggle" style="margin:0;background:#1b3252;border-color:#3b659c;color:#7ec0ff" onclick="startMoveMode(' + JSON.stringify(row.PalletKey || '') + ')">🚚 移動</button>' +
-          '<button type="button" class="detail-toggle" style="margin:0;background:#3a1520;border-color:#a33;color:#ff8f8f" onclick="confirmDeletePallet(' + JSON.stringify(row.PalletKey || '') + ')">🗑 出貨刪除</button>' +
           '<button id="itemDetailToggle" class="detail-toggle" style="margin:0;margin-left:auto" onclick="toggleItemSpecs()">完整資訊 ▼</button>' +
         '</div>' +
       '</div>' +
@@ -2582,112 +4038,107 @@ function selectSearchSku(sku) {
     if ($("searchResults")) $("searchResults").innerHTML = "";
 
     var hint = $("searchHint");
-    var skuDrop = $("skuDropdown");
-    var batchDrop = $("batchDropdown");
+    var pickBar = $("searchPickBar");
     var raw = (q.rawSku || "").trim();
-    var rawBatch = (q.rawBatch || "").trim();
 
-    function hideDrops() {
-      if (skuDrop) { skuDrop.innerHTML = ""; skuDrop.classList.add("hidden"); }
-      if (batchDrop) { batchDrop.innerHTML = ""; batchDrop.classList.add("hidden"); }
-    }
-    function fillDrop(el, html) {
-      if (!el) return;
-      if (!html) { el.innerHTML = ""; el.classList.add("hidden"); return; }
-      el.innerHTML = html;
-      el.classList.remove("hidden");
-    }
-
+    
     if (state.searchPick && state.searchPick.sku) {
       var ps = String(state.searchPick.sku).toLowerCase();
-      if (raw && ps !== raw.toLowerCase() && !ps.endsWith(raw.toLowerCase()) && !/^\d{5}$/.test(raw) && ps.indexOf(raw.toLowerCase()) < 0) {
+      if (raw && ps !== raw && raw.length < ps.length && ps.indexOf(raw) < 0 && !/^\d{5}$/.test(raw)) {
+        
+      }
+      if (raw && ps !== raw && !ps.endsWith(raw) && raw !== ps && !/^\d{5}$/.test(raw) && ps.indexOf(raw) < 0) {
         state.searchPick = { sku: '', batch: '' };
       }
     }
 
-    if (!raw && !rawBatch) {
+    if (!raw && !(q.rawBatch)) {
       state.searchPick = { sku: '', batch: '' };
       if (hint) hint.textContent = "";
-      hideDrops();
+      if (pickBar) pickBar.innerHTML = "";
       renderZoneChips();
       renderOverviewTable();
       return;
     }
 
     if (!state.searchReady) {
-      var fb = buildFallbackSearchIndex_();
-      if (fb.length) {
-        state.searchRows = fb;
-        state.searchReady = true;
-      } else {
-        if (hint) hint.textContent = "";
-        fillDrop(skuDrop, '<div class="search-dd-empty">索引準備中…</div>');
-        renderZoneChips();
-        renderOverviewTable();
-        return;
-      }
-    }
-
-    // 編號尚未選定 → SKU 下拉貼在編號框下
-    if (!state.searchPick.sku) {
-      var cands = uniqueSkuCandidates_(raw);
-      if (hint) hint.textContent = cands.length ? ("符合 " + cands.length + " 個編號") : (raw ? "找不到符合的編號" : "");
-      fillDrop(batchDrop, "");
-      if (!raw) {
-        fillDrop(skuDrop, "");
-        setStatus('', 'ok');
-      } else if (!cands.length) {
-        fillDrop(skuDrop, '<div class="search-dd-empty">找不到符合的編號</div>');
-        setStatus('找不到符合的編號', 'err');
-      } else {
-        setStatus('符合 ' + cands.length + ' 個編號，請點選', 'ok');
-        fillDrop(skuDrop, cands.map(function(c) {
-          var cc = companyClass(c.company);
-          var co = c.company ? ('<small>' + esc(c.company) + '</small>') : '';
-          return '<button type="button" class="search-dd-item ' + cc + '" data-sku="' + esc(c.sku) + '">' +
-            '<strong>' + esc(c.sku) + '</strong>' + co + '<span class="pick-count">' + c.count + '</span></button>';
-        }).join(''));
-        bindSkuDropdownClicks_(skuDrop);
-      }
+      if (hint) hint.textContent = "索引載入中…";
+      if (pickBar) pickBar.innerHTML = "";
+      setStatus("搜尋索引載入中，請稍候", "loading");
       renderZoneChips();
       renderOverviewTable();
       return;
     }
 
-    // 已選編號 → 批號下拉貼在批號框下
+    
+    if (!state.searchPick.sku) {
+      var cands = uniqueSkuCandidates_(raw);
+      if (hint) {
+        hint.textContent = cands.length
+          ? ("符合 " + cands.length + " 個編號，請點選；區域黃框＝有貨")
+          : "找不到符合的編號";
+      }
+      if (pickBar) {
+        if (!cands.length) pickBar.innerHTML = "";
+        else {
+          pickBar.innerHTML = '<div class="pick-label">選擇完整編號</div><div class="pick-row">' +
+            cands.map(function(c) {
+              var cc = companyClass(c.company);
+              var co = c.company ? ('<small>' + esc(c.company) + '</small>') : '';
+              return '<button type="button" class="sku-pick-chip ' + cc + '" onclick="selectSearchSku(' + JSON.stringify(c.sku) + ')">' +
+                '<strong>' + esc(c.sku) + '</strong>' + co + '<span class="pick-count">' + c.count + '</span></button>';
+            }).join('') + '</div>';
+        }
+      }
+      
+      renderZoneChips();
+      renderOverviewTable();
+      return;
+    }
+
+    
     var batches = batchesForSku_(state.searchPick.sku);
     if (hint) {
       hint.textContent = state.searchPick.batch
         ? ("編號 " + state.searchPick.sku + "／批號 " + state.searchPick.batch)
-        : ("編號 " + state.searchPick.sku + "：選批號或全部");
+        : ("編號 " + state.searchPick.sku + "：選批號，或不選＝顯示全部");
     }
-    fillDrop(skuDrop, "");
-    var batchHtml =
-      '<button type="button" class="search-dd-item batch-pick-chip' + (!state.searchPick.batch ? ' selected' : '') + '" data-batch="">全部批號</button>' +
-      batches.filter(function(b){
-        if (!rawBatch) return true;
-        return String(b.batch||'').toLowerCase().indexOf(rawBatch.toLowerCase()) >= 0;
-      }).map(function(b) {
-        var sel = state.searchPick.batch === b.batch ? ' selected' : '';
-        return '<button type="button" class="search-dd-item batch-pick-chip' + sel + '" data-batch="' + esc(b.batch) + '">' +
-          esc(b.batch) + '<span class="pick-count">' + b.count + '</span></button>';
-      }).join('');
-    // keep batch dropdown open while picking
-    fillDrop(batchDrop, batchHtml || '<div class="search-dd-empty">此編號無批號</div>');
-    bindBatchDropdownClicks_(batchDrop);
+    if (pickBar) {
+      pickBar.innerHTML =
+        '<div class="pick-label"><button type="button" class="pick-back" onclick="clearSearchPick()">← 重選編號</button> 批號</div>' +
+        '<div class="pick-row">' +
+        '<button type="button" class="batch-pick-chip' + (!state.searchPick.batch ? ' selected' : '') + '" onclick="selectSearchBatch(' + JSON.stringify('') + ')">全部批號</button>' +
+        batches.map(function(b) {
+          var sel = state.searchPick.batch === b.batch ? ' selected' : '';
+          return '<button type="button" class="batch-pick-chip' + sel + '" onclick="selectSearchBatch(' + JSON.stringify(b.batch) + ')">' +
+            esc(b.batch) + '<span class="pick-count">' + b.count + '</span></button>';
+        }).join('') + '</div>';
+    }
 
     renderZoneChips();
     renderOverviewTable();
     var matches = searchMatches();
-    var zones = Array.from(new Set(matches.map(function(r){ return r.Sheet; })));
-    if (state.searchPick.batchChosen) {
-      setStatus(matches.length
-        ? ("找到 " + matches.length + " 筆 @ " + zones.join("、"))
-        : "此編號目前無庫存列", matches.length ? "ok" : "err");
-    } else if (state.searchPick.sku) {
-      setStatus("已選 " + state.searchPick.sku + " → 請選批號", "ok");
+    var hit0 = matches.find(function(r){ return r.Sheet === state.activeSheet; }) || matches[0];
+    if (hint && hit0) {
+      var zoneLabel = hit0.Sheet || '';
+      if (state.searchPick.batch) {
+        hint.textContent = "編號 " + state.searchPick.sku + "／批號 " + state.searchPick.batch + " → " + zoneLabel;
+      } else {
+        hint.textContent = "編號 " + state.searchPick.sku + "：選批號，或不選＝顯示全部 → 命中區 " + zoneLabel;
+      }
     }
-    // @227 不在 renderSearch 自動跳轉；只在 selectSearchBatch 導航
+    setStatus(matches.length ? ("找到 " + matches.length + " 筆，俯視圖黃框閃爍" + (hit0 && hit0.Sheet ? ("（" + hit0.Sheet + "）") : "")) : "此編號目前無庫存列", matches.length ? "ok" : "err");
+
+    setTimeout(async function() {
+      var hit = matches.find(function(r){ return r.Sheet === state.activeSheet; }) || matches[0];
+      if (!hit) return;
+      try {
+        if (hit.Sheet && hit.Sheet !== state.activeSheet) {
+          await loadZone(hit.Sheet);
+        }
+        scrollSearchHitIntoView_(hit.Slot, hit.Depth);
+      } catch (eNav) { console.warn('search hit nav', eNav); }
+    }, 100);
   }
 
   async function jumpFromSearch(sheetName, slotId, depth, palletKey) {
@@ -2721,7 +4172,6 @@ function selectSearchSku(sku) {
       if (!row.KgPerBox) row.KgPerBox = match.KgPerBox;
       if (!row.BoxesPerPallet) row.BoxesPerPallet = match.BoxesPerPallet;
       if (!row.HanhwaCode) row.HanhwaCode = match.HanhwaCode;
-      if (!row.SinglePieceImage) row.SinglePieceImage = match.SinglePieceImage || match.ImageUrl || '';
     }
     return row;
   }
@@ -2751,14 +4201,6 @@ function selectSearchSku(sku) {
     openEditByKey(palletKey);
   }
 
-  function triggerDeleteFromEdit() {
-    var key = state.activePalletKey;
-    closeEdit(true);
-    if (key) {
-      confirmDeletePallet(key);
-    }
-  }
-
   function openEditByKey(palletKey) {
     const row = findRowByKey(palletKey);
     if (!row) return;
@@ -2768,8 +4210,7 @@ function selectSearchSku(sku) {
     $("editSku").value = row.SKU || '';
     $("editBatch").value = row.Batch || '';
     if ($("editBrand")) $("editBrand").value = detailValue(row.Brand);
-    var seriesDisp = row.ChineseSeries ? (row.ChineseSeries + (row.Series ? ' (' + row.Series + ')' : '')) : (row.Series || '');
-    if ($("editSeries")) $("editSeries").value = detailValue(seriesDisp);
+    if ($("editSeries")) $("editSeries").value = detailValue(row.Series || row.ChineseSeries);
     if ($("editOriginalName")) $("editOriginalName").value = detailValue(row.OriginalName);
     if ($("editSize")) $("editSize").value = detailValue(row.Size);
     $("editBoxes").value = Number(row.BoxQty || 0);
@@ -2786,22 +4227,16 @@ function selectSearchSku(sku) {
     
     var imgBox = $('editProductImg');
     if (imgBox) {
-      var url = row.SinglePieceImage || row.ImageUrl || row.imageUrl || '';
+      var url = row.ImageUrl || row.imageUrl || '';
       if (!url && state.searchRows) {
-        var hit = state.searchRows.find(function(r){
-          return String(r.SKU||'').trim().toLowerCase() === String(row.SKU||'').trim().toLowerCase();
-        });
-        if (hit) url = hit.SinglePieceImage || hit.ImageUrl || hit.imageUrl || '';
+        var hit = state.searchRows.find(function(r){ return String(r.SKU||'').toLowerCase() === String(row.SKU||'').toLowerCase(); });
+        if (hit) url = hit.ImageUrl || hit.imageUrl || '';
       }
       if (url) {
-        var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-        if (match && match[1]) {
-          url = 'https://lh3.googleusercontent.com/d/' + match[1] + '=w600';
-        }
-        imgBox.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(row.SKU||'') + '" style="max-width:100%;max-height:140px;border-radius:10px;object-fit:contain;background:#0b1322;border:1px solid #233452">';
+        imgBox.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(row.SKU||'') + '" style="max-width:100%;max-height:160px;border-radius:10px;object-fit:contain;background:#0b1322">';
         imgBox.style.display = '';
       } else {
-        imgBox.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px 0">（價目表尚無單片圖片欄可預覽）</div>';
+        imgBox.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">（價目表尚無圖片欄可預覽）</div>';
         imgBox.style.display = '';
       }
     }
@@ -2976,20 +4411,9 @@ function selectSearchSku(sku) {
       if (e.key === "Escape") forceCloseAllOverlays();
     });
     $("searchSku").addEventListener("input", onSkuInput);
-    $("searchSku").addEventListener("focus", function(){ renderSearch(); });
-    document.addEventListener("click", function(ev){
-      var sf = $("skuField"); var bf = $("batchField");
-      if (sf && !sf.contains(ev.target)) { var d=$("skuDropdown"); if(d) d.classList.add("hidden"); }
-      if (bf && !bf.contains(ev.target)) { var d2=$("batchDropdown"); if(d2) d2.classList.add("hidden"); }
-      var up = document.getElementById("undoPicker");
-      if (up && !up.contains(ev.target) && !(ev.target.closest && ev.target.closest(".undo-btn, .banner-undo-btn, .move-bar-undo"))) {
-        closeUndoPicker();
-      }
-    });
     $("searchBatch").addEventListener("input", onBatchInput);
     $("zoneChips").addEventListener("click", e => { const btn = e.target.closest(".zone-chip[data-sheet]"); if (btn) loadZone(btn.dataset.sheet); });
     $("overviewTableWrap").addEventListener("click", e => { const btn = e.target.closest(".cell-btn[data-slot][data-depth]"); if (btn) selectCell(btn.dataset.slot, Number(btn.dataset.depth)); });
-
     $("searchResults").addEventListener("click", e => { const btn = e.target.closest(".search-card[data-sheet]"); if (btn) jumpFromSearch(btn.dataset.sheet, btn.dataset.slot, Number(btn.dataset.depth), btn.dataset.key || ''); });
     $("cellItems").addEventListener("click", e => { const btn = e.target.closest(".item-chip[data-key]"); if (btn) selectItem(btn.dataset.key); });
     
@@ -3084,17 +4508,6 @@ function selectSearchSku(sku) {
     if (e.target.closest('.stack, .cell-btn, .overview-table')) e.preventDefault();
   });
 
-  window.selectSearchSku = selectSearchSku;
-  window.selectSearchBatch = selectSearchBatch;
-  window.clearSearchPick = clearSearchPick;
-  window.clearSkuSearch = clearSkuSearch;
-  window.clearBatchSearch = clearBatchSearch;
-  window.undoSteps_ = undoSteps_;
-  window.deleteMovingPallet = deleteMovingPallet;
-  window.confirmDeletePallet = confirmDeletePallet;
-  window.flushPendingMoves = flushPendingMoves;
-  window.discardPendingMoves = discardPendingMoves;
-
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => { setupListeners(); boot(); });
   } else {
@@ -3103,3 +4516,5 @@ function selectSearchSku(sku) {
   }
 
 </script>
+</body>
+</html>

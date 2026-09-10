@@ -1,51 +1,78 @@
-<!doctype html>
-<html>
-<head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="鈦傳速倉儲">
+  <meta name="theme-color" content="#02060d">
+  <title>鈦傳速智慧倉儲管理系統</title>
+  <link rel="apple-touch-icon" sizes="192x192" href="data:image/png;base64,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 hazardous m²)">
+  <link rel="icon" type="image/png" sizes="192x192" href="data:image/png;base64,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 hazardous m²)">
   <?!= include_('warehouse_grid_ui_css'); ?>
 </head>
 <body>
   <main class="app-shell">
     <section class="app-panel">
       <header class="hero">
-        <div>
-          <h1>鈦傳速智慧倉儲系統 <span id="ver" class="ver-tag"></span></h1>
+        <div class="hero-title-row">
+          <h1>永安倉</h1>
           <div class="cache-row">
             <span id="cacheInfo" class="cache-info loading">準備連線...</span>
             <button class="cache-refresh" onclick="forceRefresh()" title="清除快取重新讀取">🔄</button>
             <div id="undoRedoWrap" class="undo-redo-wrap" style="display:none"></div>
-          </div>
-          <div class="operator-row">
-            <span class="operator-label">操作者</span>
-            <input id="operatorInput" class="operator-input" placeholder="輸入姓名" autocomplete="off" oninput="saveOperator()" onchange="saveOperator()">
           </div>
         </div>
       </header>
 
       <section class="topbar">
         <div class="search-dual">
-          <input id="searchSku" class="search" placeholder="搜尋編號 / SKU">
-          <input id="searchBatch" class="search" placeholder="搜尋批號">
+          <div class="search-field" id="skuField">
+            <div class="search-input-wrap">
+              <input id="searchSku" class="search" placeholder="搜尋編號 / SKU / 5碼" autocomplete="off">
+              <button type="button" id="clearSkuBtn" class="search-clear-btn" onclick="clearSkuSearch()" title="清除編號" aria-label="清除編號">✕</button>
+            </div>
+            <div id="skuDropdown" class="search-dropdown hidden" role="listbox"></div>
+          </div>
+          <div class="search-field" id="batchField">
+            <div class="search-input-wrap">
+              <input id="searchBatch" class="search" placeholder="搜尋批號" autocomplete="off">
+              <button type="button" id="clearBatchBtn" class="search-clear-btn" onclick="clearBatchSearch()" title="清除批號" aria-label="清除批號">✕</button>
+            </div>
+            <div id="batchDropdown" class="search-dropdown hidden" role="listbox"></div>
+          </div>
         </div>
+        <div id="searchHint" class="search-hint"></div>
+        <div id="searchPickBar" class="search-pick-bar" style="display:none"></div>
       </section>
 
       <section id="searchWrap" class="search-wrap hidden">
-        <div class="section-title">搜尋結果</div>
+        <div class="search-title-sm">搜尋結果</div>
         <div id="searchResults" class="search-results"></div>
       </section>
 
-      <section>
-        <div class="section-title">區域</div>
+      <section class="zone-section">
+        <div class="zone-header-row">
+          <span class="section-title">區域</span>
+          <div id="whTabs" class="wh-tabs">
+            <button class="wh-tab-btn active" data-wh="ALL" onclick="selectWhTab('ALL')">全部</button>
+            <button class="wh-tab-btn" data-wh="A" onclick="selectWhTab('A')">A倉</button>
+            <button class="wh-tab-btn" data-wh="B" onclick="selectWhTab('B')">B倉</button>
+            <button class="wh-tab-btn" data-wh="C" onclick="selectWhTab('C')">C倉</button>
+          </div>
+        </div>
         <div id="zoneChips" class="zone-chips"></div>
       </section>
 
       <section class="overview-panel">
         <div class="overview-head">
-          <div class="section-title">俯視圖</div>
-          <div class="zoom-controls">
-            <button class="ghost-btn zoom-btn" onclick="zoomOut()">－</button>
-            <button class="ghost-btn zoom-btn" onclick="zoomIn()">＋</button>
+          <div class="overview-head-left">
+            <span class="section-title">俯視圖</span>
+            <div class="zoom-controls">
+              <button class="ghost-btn zoom-btn" onclick="zoomOut()">－</button>
+              <button class="ghost-btn zoom-btn" onclick="zoomIn()">＋</button>
+            </div>
+          </div>
+          <div id="minimapWrap" class="minimap-wrap" style="display:none!important" title="倉位預設圖（點擊或滑動定位）">
+            <div id="minimapSvg" class="minimap-svg-container"></div>
           </div>
         </div>
         <div id="overviewTableWrap" class="overview-scroll"></div>
@@ -58,10 +85,9 @@
             <div id="slotTitle" class="section-title">剖面圖</div>
             <div id="slotMeta" class="section-subtitle">先從俯視圖點一個格子</div>
           </div>
-          <div id="warehouseMapWrap" class="warehouse-map-wrap detail-map"></div>
+          <div id="warehouseMapWrap" class="warehouse-map-wrap detail-map" style="display:none!important"></div>
         </div>
-        <div id="cellItems" class="cell-items"></div>
-        <div id="itemDetail" class="item-detail empty">先點一個 item 看完整資料</div>
+        <div id="cellItems" class="cell-items hidden" style="display:none"></div>
         <div id="crossSection" class="cross-section"></div>
       </section>
     </section>
@@ -69,27 +95,32 @@
 
   <div id="detailBackdrop" class="detail-backdrop hidden" onclick="closeDetail()"></div>
 
-  <div id="editModal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head">
-        <div>
-          <div class="section-title">更新棧板資料</div>
-          <div id="editMeta" class="section-subtitle">-</div>
-        </div>
-        <button class="ghost-btn" onclick="closeEdit()">關閉</button>
+  <div id="editModal" class="modal hidden" onclick="if(event.target===this)closeEdit(true);" ontouchend="if(event.target===this){event.preventDefault();closeEdit(true);}">
+    <div class="modal-card compact-card">
+      <button class="modal-close-x" onclick="closeEdit(true)" ontouchend="event.preventDefault();closeEdit(true)" type="button" title="關閉" aria-label="關閉">✕</button>
+      <div class="modal-head-sm">
+        <span class="modal-title-text">更新棧板資料</span>
+        <span id="editMeta" class="modal-subtitle-text">-</span>
       </div>
-      <div class="form-grid">
-        <label class="wide">編號<input id="editSku"></label>
-        <label class="wide">批號<input id="editBatch"></label>
-        <div class="qty-row">
-          <label class="qty-label">箱數<small id="editPzHint" class="pz-hint"></small><input id="editBoxes" type="number" inputmode="numeric" min="0" step="1"></label>
-          <label class="qty-label">片數<input id="editPieces" type="number" inputmode="numeric" min="0" step="1"></label>
+      <div id="editProductImg" class="edit-product-img" style="text-align:center;margin:0 0 8px"></div>
+      <div class="form-grid-compact">
+        <label>編號<input id="editSku"></label>
+        <label>批號<input id="editBatch"></label>
+        <label>品牌<input id="editBrand" readonly></label>
+        <label>系列<input id="editSeries" readonly></label>
+        <label>原文<input id="editOriginalName" readonly></label>
+        <label>尺寸<input id="editSize" readonly></label>
+        <div class="three-col-row">
+          <label>箱數<input id="editBoxes" type="number" inputmode="numeric" min="0" step="1"></label>
+          <label>片數<input id="editPieces" type="number" inputmode="numeric" min="0" step="1"></label>
+          <label>狀態<select id="editStatus"><option>正常庫存</option><option>混板/散板</option><option>專案庫存</option><option>最後一板</option></select></label>
         </div>
-        <label class="wide">狀態<select id="editStatus"><option>正常庫存</option><option>混板/散板</option><option>專案庫存</option><option>最後一板</option></select></label>
       </div>
-      <div class="action-bar">
-        <button class="ghost-btn" onclick="closeEdit()">取消</button>
-        <button class="primary-btn" onclick="saveEdit()">更新</button>
+      <div class="action-bar-compact">
+        <button class="ghost-btn-sm" onclick="triggerMoveFromEdit()" type="button" style="background:#1b3252;border-color:#3b659c;color:#7ec0ff;">🚚 移動</button>
+        <button class="ghost-btn-sm" onclick="triggerDeleteFromEdit()" type="button" style="margin-right:auto;background:#3f1418;border-color:#7f1d1d;color:#fca5a5;">🗑️ 刪除此棧板</button>
+        <button class="ghost-btn-sm" onclick="closeEdit(true)" ontouchend="event.preventDefault();closeEdit(true)" type="button">取消</button>
+        <button class="primary-btn-sm" onclick="saveEdit()" type="button">更新</button>
       </div>
     </div>
   </div>
@@ -117,8 +148,17 @@
       <div id="moveConfirmBody" class="move-confirm-body"></div>
       <div class="action-bar">
         <button class="ghost-btn" onclick="cancelMoveMode()">取消</button>
-        <button class="primary-btn" id="moveConfirmBtn" onclick="executeMove()" ontouchend="event.preventDefault(); executeMove()">確認移動</button>
+        <button class="primary-btn" id="moveConfirmBtn" onclick="executeMove()">確認移動</button>
       </div>
+    </div>
+  </div>
+
+  
+  <!-- 全螢幕讀取：fixed，捲到哪都看得到 -->
+  <div id="gridLoadingOverlay" class="grid-loading-overlay hidden">
+    <div class="spinner-box">
+      <div class="spinner-ring"></div>
+      <div id="gridLoadingText" class="spinner-text">資料載入中，請稍候...</div>
     </div>
   </div>
 
