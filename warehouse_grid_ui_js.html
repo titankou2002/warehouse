@@ -1255,32 +1255,64 @@ function startMoveMode(palletKey) {
         reject(new Error("google.script.run 不存在，請確認從 Apps Script /exec 開啟"));
         return;
       }
-      let done = false;
-      const timeoutMs = method === 'movePalletGroup' ? 90000 : method === 'movePallet' ? 60000 : method === "updateWarehousePallet" ? 45000 : method === "getSearchIndex" ? 45000 : method === "getWarehouseZoneView" ? 25000 : 40000;
-      console.log('[gas calling]', method, JSON.stringify(args[0] || ''));
-      const timer = setTimeout(() => {
-        if (!done) {
+      var attempts = 0;
+      var maxAttempts = (method === 'getWarehouseZoneView' || method === 'getSearchIndex' || method === 'getMoveHistory') ? 3 : 1;
+
+      function callOnce() {
+        attempts++;
+        let done = false;
+        const timeoutMs = method === 'movePalletGroup' ? 90000 : method === 'movePallet' ? 60000 : method === "updateWarehousePallet" ? 45000 : method === "getSearchIndex" ? 45000 : method === "getWarehouseZoneView" ? 25000 : 40000;
+        console.log('[gas calling]', method, 'attempt:', attempts, JSON.stringify(args[0] || ''));
+
+        const timer = setTimeout(() => {
+          if (!done) {
+            if (attempts < maxAttempts) {
+              done = true;
+              console.warn('[gas TIMEOUT retry]', method, attempts);
+              setTimeout(callOnce, 800);
+            } else {
+              done = true;
+              console.error('[gas TIMEOUT]', method, timeoutMs + 'ms');
+              reject(new Error(method + " timeout after " + Math.round(timeoutMs / 1000) + "s"));
+            }
+          }
+        }, timeoutMs);
+
+        try {
+          google.script.run
+            .withSuccessHandler(result => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              console.log('[gas OK]', method, result);
+              resolve(result);
+            })
+            .withFailureHandler(error => {
+              if (done) return;
+              var msg = (error && (error.message || error.details || error.name)) || String(error || 'unknown');
+              console.error('[gas raw ERR]', method, msg, error);
+              if (attempts < maxAttempts && (msg.indexOf('NetworkError') >= 0 || msg.indexOf('HTTP 0') >= 0 || msg.indexOf('連線失敗') >= 0 || msg.indexOf('Failed to fetch') >= 0)) {
+                done = true;
+                clearTimeout(timer);
+                console.warn('[gas auto-retry NetworkError]', method, attempts);
+                setTimeout(callOnce, 800);
+                return;
+              }
+              done = true;
+              clearTimeout(timer);
+              console.error('[gas ERR]', method, msg);
+              reject(new Error(msg));
+            })[method](...args);
+        } catch(syncErr) {
+          if (done) return;
           done = true;
-          console.error('[gas TIMEOUT]', method, timeoutMs + 'ms');
-          reject(new Error(method + " timeout after " + Math.round(timeoutMs / 1000) + "s"));
+          clearTimeout(timer);
+          console.error('[gas SYNC-THROW]', method, syncErr);
+          reject(syncErr);
         }
-      }, timeoutMs);
-      try {
-        google.script.run
-          .withSuccessHandler(result => { console.log('[gas raw OK]', method); if (done) return; done = true; clearTimeout(timer); console.log('[gas OK]', method, result); resolve(result); })
-          .withFailureHandler(error => {
-            var msg = (error && (error.message || error.details || error.name)) || String(error || 'unknown');
-            console.error('[gas raw ERR]', method, msg, error);
-            if (done) return; done = true; clearTimeout(timer);
-            console.error('[gas ERR]', method, msg);
-            reject(new Error(msg));
-          })[method](...args);
-        console.log('[gas queued]', method);
-      } catch(syncErr) {
-        done = true; clearTimeout(timer);
-        console.error('[gas SYNC-THROW]', method, syncErr);
-        reject(syncErr);
       }
+
+      callOnce();
     });
   }
 
@@ -2390,7 +2422,7 @@ function selectSearchSku(sku) {
             var tag = isRed ? ' <span class="status-tag red" style="font-size:9px;padding:0 3px">散板</span>' : isYellow ? ' <span class="status-tag yellow" style="font-size:9px;padding:0 3px">散板</span>' : isGreen ? ' <span class="status-tag green" style="font-size:9px;padding:0 3px">專案</span>' : '';
             var movedCls = isRecentlyMoved(row) ? ' just-moved' : '';
             var timeHtml = row.UpdatedAt ? '<span class="pallet-card-time" style="color:#7ff0a6;font-size:10px;font-weight:800;margin-left:4px">🕒 ' + esc(formatMoveTime(row.UpdatedAt)) + '</span>' : '';
-            var deleteX = '<span class="pallet-card-delete-x" onclick="event.stopPropagation(); deleteSingleSkuFromPallet(' + JSON.stringify(row.PalletKey || '') + '); return false;" title="刪除此單一編號">✕</span>';
+            var deleteX = '';
             return '<button class="pallet ' + paletteClass(row) + ' ' + selected + movedCls + '" data-key="' + esc(row.PalletKey || '') + '" onclick="onPalletTap(' + JSON.stringify(row.PalletKey || '') + '); return false;">' + deleteX + '<div class="pallet-sku">' + skuHtml(row.SKU || '-') + tag + '</div><div class="pallet-meta"><span>' + esc(row.Batch || '-') + '</span><span>' + esc(formatPalletQty_(row)) + timeHtml + '</span></div></button>';
           }).join('');
           if (group.pallets.length > 1) {

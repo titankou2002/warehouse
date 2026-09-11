@@ -1301,7 +1301,7 @@
     .depth-head strong { font-size: 12px; }
     .depth-head small { font-size: 10px; }
     .app-shell { padding: 0 !important; width: 100vw !important; max-width: 100vw !important; overflow-x: hidden !important; }
-    .app-panel { border-radius: 0 !important; padding: 12px 8px !important; border-width: 0 !important; min-height: 100vh; width: 100vw !important; max-width: 100vw !important; box-sizing: border-box !important; overflow-x: hidden !important; }
+    .app-panel { border-radius: 0 !important; padding: max(calc(env(safe-area-inset-top, 0px) + 12px), 46px) 8px 12px 8px !important; border-width: 0 !important; min-height: 100vh; width: 100vw !important; max-width: 100vw !important; box-sizing: border-box !important; overflow-x: hidden !important; }
     .hero, .topbar { flex-direction: column; align-items: stretch; }
     .hero-title-row { align-items: center; }
     .hero h1 { font-size: 22px; margin: 0; }
@@ -1326,7 +1326,7 @@
       box-shadow: none;
       display: flex;
       flex-direction: column;
-      padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+      padding: max(calc(env(safe-area-inset-top, 0px) + 12px), 46px) 8px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
       background: #070b14;
     }
     .detail-panel.hidden { display: none !important; }
