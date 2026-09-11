@@ -65,7 +65,8 @@ function readDataTablePallets_(sheetName) {
       ChineseSeries: specs ? (specs.ChineseSeries || '') : '',
       OriginalName: specs ? (specs.OriginalName || '') : '',
       Size: specs ? (specs.Size || '') : '',
-      PiecesPerBox: specs ? (specs.PiecesPerBox || null) : null
+      PiecesPerBox: specs ? (specs.PiecesPerBox || null) : null,
+      SinglePieceImage: specs ? (specs.SinglePieceImage || '') : ''
     };
     pallet.PalletKey = makePalletKey_(pallet);
     pallets.push(pallet);
@@ -144,44 +145,75 @@ function writeDataTablePallets_(sheetName, pallets) {
   }
 }
 
-function findPalletIndex_(pallets, key) {
-  if (!key) return -1;
-  var keyStr = String(key).trim();
-  var keyParts = keyStr.split('||');
-  var keySlot  = String(keyParts[1] || '').trim();
-  var keyDepth = Number(keyParts[2] || 0);
-  var keyLevel = Number(keyParts[3] || 0);
-  var keySKU   = String(keyParts[4] || '').trim();
-  var keyBatch = String(keyParts[5] || '').trim();
+function findPalletIndex_(pallets, key, oldObj) {
+  if (!pallets || !pallets.length) return -1;
+  var keyStr = String(key || '').trim();
 
   // 1. 完全比對 PalletKey 或 PalletID
-  for (var i = 0; i < pallets.length; i++) {
-    if (pallets[i].PalletKey === keyStr || pallets[i].PalletID === keyStr) return i;
-  }
-
-  // 2. 彈性比對：Slot, Depth, Level, SKU, Batch
-  for (var j = 0; j < pallets.length; j++) {
-    var p = pallets[j];
-    if (String(p.Slot).trim() === keySlot && Number(p.Depth) === keyDepth &&
-        String(p.SKU).trim() === keySKU && String(p.Batch).trim() === keyBatch) {
-      if (keyLevel > 0 && Number(p.Level) === keyLevel) return j;
+  if (keyStr) {
+    for (var i = 0; i < pallets.length; i++) {
+      if (pallets[i].PalletKey === keyStr || pallets[i].PalletID === keyStr) return i;
     }
   }
 
-  // 3. Fallback：比對 Slot, Depth, SKU, Batch (忽略 Level)
+  var old = oldObj || {};
+  var targetSKU = String(old.SKU || '').trim();
+  var targetBatch = String(old.Batch || '').trim();
+  var targetSlot = String(old.Slot || '').trim();
+  var targetDepth = Number(old.Depth || 0);
+  var targetLevel = Number(old.Level || 0);
+
+  // 如果 key 是 PalletKey 格式 (A||B||C||D||E||F)
+  if (keyStr.indexOf('||') !== -1) {
+    var parts = keyStr.split('||');
+    if (!targetSlot) targetSlot = String(parts[1] || '').trim();
+    if (!targetDepth) targetDepth = Number(parts[2] || 0);
+    if (!targetLevel) targetLevel = Number(parts[3] || 0);
+    if (!targetSKU) targetSKU = String(parts[4] || '').trim();
+    if (!targetBatch) targetBatch = String(parts[5] || '').trim();
+  }
+
+  // 2. 比對 Slot + Depth + Level + SKU + Batch
+  for (var j = 0; j < pallets.length; j++) {
+    var p = pallets[j];
+    if (String(p.Slot).trim() === targetSlot && Number(p.Depth) === targetDepth &&
+        String(p.SKU).trim() === targetSKU && String(p.Batch).trim() === targetBatch) {
+      if (targetLevel > 0 && Number(p.Level) === targetLevel) return j;
+    }
+  }
+
+  // 3. 比對 Slot + Depth + SKU + Batch
   for (var k = 0; k < pallets.length; k++) {
     var p2 = pallets[k];
-    if (String(p2.Slot).trim() === keySlot && Number(p2.Depth) === keyDepth &&
-        String(p2.SKU).trim() === keySKU && String(p2.Batch).trim() === keyBatch) {
+    if (String(p2.Slot).trim() === targetSlot && Number(p2.Depth) === targetDepth &&
+        String(p2.SKU).trim() === targetSKU && String(p2.Batch).trim() === targetBatch) {
       return k;
     }
   }
 
-  // 4. 極致 Fallback：比對 SKU, Batch
-  if (keySKU) {
-    for (var m = 0; m < pallets.length; m++) {
-      if (String(pallets[m].SKU).trim() === keySKU && String(pallets[m].Batch).trim() === keyBatch) {
-        return m;
+  // 4. 比對 Slot + SKU + Batch
+  for (var m = 0; m < pallets.length; m++) {
+    var p3 = pallets[m];
+    if (String(p3.Slot).trim() === targetSlot && String(p3.SKU).trim() === targetSKU && String(p3.Batch).trim() === targetBatch) {
+      return m;
+    }
+  }
+
+  // 5. 比對 SKU + Batch
+  if (targetSKU) {
+    for (var n = 0; n < pallets.length; n++) {
+      var p4 = pallets[n];
+      if (String(p4.SKU).trim() === targetSKU && String(p4.Batch).trim() === targetBatch) {
+        return n;
+      }
+    }
+  }
+
+  // 6. 極致 Fallback: 單純比對 SKU
+  if (targetSKU) {
+    for (var x = 0; x < pallets.length; x++) {
+      if (String(pallets[x].SKU).trim() === targetSKU) {
+        return x;
       }
     }
   }
@@ -264,7 +296,7 @@ function updatePalletDataTable_(payload) {
   var old = normalized.oldData;
   var newData = normalized.newData;
 
-  var idx = findPalletIndex_(pallets, old.PalletKey || old.PalletID);
+  var idx = findPalletIndex_(pallets, old.PalletKey || old.PalletID, old);
   if (idx < 0) {
     throw new Error('找不到欲更新之棧板: ' + old.SKU);
   }

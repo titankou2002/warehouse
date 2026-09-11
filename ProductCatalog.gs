@@ -115,7 +115,7 @@ function loadCatalog_(catalogName) {
       if (header === '原廠品名' || header === '產品名稱' || header === '品名') nameIdx = h;
       if (header === '尺寸(cm)' || header === '尺寸') sizeIdx = h;
       if (header === '片/箱' || header === '片裝數') pcsIdx = h;
-      if (header === '單片連結網址' || header === '單片圖' || header === '圖片網址' || header.indexOf('單片') >= 0) { if (imgIdx < 0) imgIdx = h; }
+      if (header === '單片連結網址' || header === '單片圖' || header === '圖片網址' || header === '單片網址' || header === '圖片連結' || header === '雲端圖片/封面' || header === '雲端圖片' || header === '圖片' || header.indexOf('單片') >= 0 || header.indexOf('圖片') >= 0) { if (imgIdx < 0) imgIdx = h; }
     }
 
     var result = {};

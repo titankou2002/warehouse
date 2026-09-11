@@ -197,14 +197,26 @@ function normalizeUpdatePayload_(payload) {
     return n;
   }
 
+  var depth = Number(oldData.Depth || (typeof parseStackDepth_ === 'function' ? parseStackDepth_(oldData.Stack) : 0) || 0);
+  var level = Number(oldData.Level || 0);
+
+  var normOld = {
+    Sheet: sheetName,
+    Stack: cleanText(oldData.Stack),
+    Slot: cleanText(oldData.Slot),
+    Depth: depth,
+    Level: level,
+    SKU: cleanText(oldData.SKU),
+    Batch: cleanText(oldData.Batch),
+    PalletKey: cleanText(oldData.PalletKey),
+    PalletID: cleanText(oldData.PalletID)
+  };
+  if (!normOld.PalletKey && typeof makePalletKey_ === 'function') {
+    normOld.PalletKey = makePalletKey_(normOld);
+  }
+
   return {
-    oldData: {
-      Sheet: sheetName,
-      Stack: cleanText(oldData.Stack),
-      Slot: cleanText(oldData.Slot),
-      SKU: cleanText(oldData.SKU),
-      Batch: cleanText(oldData.Batch)
-    },
+    oldData: normOld,
     newData: {
       Sheet: sheetName,
       Stack: cleanText(oldData.Stack),

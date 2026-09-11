@@ -527,9 +527,9 @@ function startMoveMode(palletKey) {
     var bar = document.createElement('div');
     bar.id = 'pendingSaveBar';
     bar.className = 'pending-save-bar';
-    bar.innerHTML = '<div class="pending-save-text"><strong>' + n + '</strong> 筆移動尚未寫入試算表</div>' +
-      '<button type="button" class="pending-save-btn" onclick="flushPendingMoves()">寫入試算表</button>' +
-      '<button type="button" class="pending-discard-btn" onclick="discardPendingMoves()">取消這些移動</button>';
+    bar.innerHTML = '<div class="pending-save-text"><div><strong>' + n + '</strong> 筆移動</div><div>尚未儲存</div></div>' +
+      '<button type="button" class="pending-save-btn" onclick="flushPendingMoves()">儲存</button>' +
+      '<button type="button" class="pending-discard-btn" onclick="discardPendingMoves()">取消</button>';
     document.body.appendChild(bar);
     document.body.classList.add('has-pending-save');
   }
@@ -2987,6 +2987,18 @@ function selectSearchSku(sku) {
       }
     });
     $("searchBatch").addEventListener("input", onBatchInput);
+    $("searchBatch").addEventListener("focus", function() {
+      updateSearchDatalists('batch');
+      renderSearch();
+      var d2 = $("batchDropdown");
+      if (d2) d2.classList.remove("hidden");
+    });
+    $("searchBatch").addEventListener("click", function() {
+      updateSearchDatalists('batch');
+      renderSearch();
+      var d2 = $("batchDropdown");
+      if (d2) d2.classList.remove("hidden");
+    });
     $("zoneChips").addEventListener("click", e => { const btn = e.target.closest(".zone-chip[data-sheet]"); if (btn) loadZone(btn.dataset.sheet); });
     $("overviewTableWrap").addEventListener("click", e => { const btn = e.target.closest(".cell-btn[data-slot][data-depth]"); if (btn) selectCell(btn.dataset.slot, Number(btn.dataset.depth)); });
 

@@ -27,14 +27,14 @@
         <div class="search-dual">
           <div class="search-field" id="skuField">
             <div class="search-input-wrap">
-              <input id="searchSku" class="search" placeholder="搜尋編號 / SKU / 5碼" autocomplete="off">
+              <input id="searchSku" class="search" placeholder="搜尋編號 / SKU / 5碼" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text" lang="en">
               <button type="button" id="clearSkuBtn" class="search-clear-btn" onclick="clearSkuSearch()" title="清除編號" aria-label="清除編號">✕</button>
             </div>
             <div id="skuDropdown" class="search-dropdown hidden" role="listbox"></div>
           </div>
           <div class="search-field" id="batchField">
             <div class="search-input-wrap">
-              <input id="searchBatch" class="search" placeholder="搜尋批號" autocomplete="off">
+              <input id="searchBatch" class="search" placeholder="搜尋批號" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text" lang="en">
               <button type="button" id="clearBatchBtn" class="search-clear-btn" onclick="clearBatchSearch()" title="清除批號" aria-label="清除批號">✕</button>
             </div>
             <div id="batchDropdown" class="search-dropdown hidden" role="listbox"></div>
@@ -104,8 +104,8 @@
       </div>
       <div id="editProductImg" class="edit-product-img" style="text-align:center;margin:0 0 8px"></div>
       <div class="form-grid-compact">
-        <label>編號<input id="editSku"></label>
-        <label>批號<input id="editBatch"></label>
+        <label>編號<input id="editSku" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text" lang="en"></label>
+        <label>批號<input id="editBatch" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text" lang="en"></label>
         <label>品牌<input id="editBrand" readonly></label>
         <label>系列<input id="editSeries" readonly></label>
         <label>原文<input id="editOriginalName" readonly></label>
@@ -117,8 +117,8 @@
         </div>
       </div>
       <div class="action-bar-compact">
-        <button class="ghost-btn-sm" onclick="triggerMoveFromEdit()" type="button" style="background:#1b3252;border-color:#3b659c;color:#7ec0ff;">🚚 移動</button>
-        <button class="ghost-btn-sm" onclick="triggerDeleteFromEdit()" type="button" style="margin-right:auto;background:#3f1418;border-color:#7f1d1d;color:#fca5a5;">🗑️ 刪除此棧板</button>
+        <button class="ghost-btn-sm" onclick="triggerMoveFromEdit()" type="button" style="background:#1b3252;border-color:#3b659c;color:#7ec0ff;">移動</button>
+        <button class="ghost-btn-sm" onclick="triggerDeleteFromEdit()" type="button" style="margin-right:auto;background:#3f1418;border-color:#7f1d1d;color:#fca5a5;">刪除</button>
         <button class="ghost-btn-sm" onclick="closeEdit(true)" ontouchend="event.preventDefault();closeEdit(true)" type="button">取消</button>
         <button class="primary-btn-sm" onclick="saveEdit()" type="button">更新</button>
       </div>
