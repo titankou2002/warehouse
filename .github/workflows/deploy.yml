@@ -73,4 +73,4 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
             -p 21098 "$SSH_USER@$SSH_HOST" \
-            "cd $DEPLOY_PATH && ~/.cpanel/caches/cloudlinux-alt-nodejs20/bin/npm install --omit=dev --ignore-scripts && passenger-config restart-app $DEPLOY_PATH || true"
+            "cd $DEPLOY_PATH && ~/.cpanel/caches/cloudlinux-alt-nodejs20/bin/npm install --omit=dev --ignore-scripts && mkdir -p tmp && touch tmp/restart.txt && (passenger-config restart-app $DEPLOY_PATH || true)"
